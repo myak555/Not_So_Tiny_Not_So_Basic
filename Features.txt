@@ -1,0 +1,57 @@
+Current functionality implemented and tested:
+	(+) signifies change additions to original TinyBASIC fork;
+	(-) feature removed;
+	(*) feature reworked / rewritten;
+	(/) feature unchanged.
+
+(*) Major rework of expression handling. Instead of 4 support 7 levels of operation priority:
+	1(*) unary + and -, numeric entry, functions and brackets; functions can handle multiple parameters, e.g. POW(2,3);
+	2(+) a power b as a**b;
+	3(*) division, multiplication, (+)remainder as %;
+	4(*) addition and subtaraction;
+	5(*) comparisons, such as A != 6;
+	6(+) logical NOT;
+	7(+) logical AND / OR, such as 17 <= A AND A <= 34 AND NOT B.
+
+(*) FILES [folder_name] - rewritten; now can handle folders on SD. Optimized for small screens. Other statements can execute in the same line.
+(*) CHAIN [folder_name/]file_name - rewritten; now can handle folders on SD.
+(*) LOAD [folder_name/]file_name - rewritten; now can handle folders on SD.
+(*) SAVE [folder_name/]file_name - rewritten; now can handle folders on SD. Other statements can execute in the same line.
+(*) LIST [from_line][, to_line] - rewritten, optimized for small screens, added from and to options. Other statements can execute in the same line.
+(*) MEM - refactored, optimized for small screens. Other statements can execute in the same line.
+(/) NEW - unchanged.
+(*) DELAY milliseconds - refactored.
+(*) AWRITE pin, value - rewritten, now checks pin availability.
+(*) DWRITE pin, value - rewritten, now accept TRUE and FALSE as values.
+(*) TONEW frequency, duration - rewritten.
+(*) TONE frequency, duration - rewritten.
+(/) NOTONE  - unchanged.
+(*) EFORMAT - rewritten. Other statements can execute in the same line.
+(*) ELIST - rewritten. Other statements can execute in the same line.
+(*) ECHAIN - rewritten.
+(*) ELOAD - rewritten.
+(*) ESAVE - rewritten. Other statements can execute in the same line.
+(*) RSEED value - rewritten.
+(/) RUN.
+(/) LET var = value.
+(/) IF expression.
+(/) GOTO line_number.
+(/) GOSUB line_number.
+(/) RETURN.
+(/) REM <any_text>.
+(/) FOR var=<from> TO <to> [STEP <step>].
+(/) NEXT var.
+(/) INPUT var.
+(/) PRINT string/expression.
+(*) POKE address, value - rewritten.
+(*) PEEK( address) - rewritten.
+(/) END.
+(/) STOP.
+(/) BYE.
+(*) ABS(expression) - refactored.
+(*) AREAD(pin_number) - refactored.
+(*) DREAD(pin_number) - refactored.
+(*) RND(expression) - refactored.
+(+) SHOW(line_number) - prints one line, returns address.
+(+) DUMP(address, n_bytes) - prints memory dump.
+
