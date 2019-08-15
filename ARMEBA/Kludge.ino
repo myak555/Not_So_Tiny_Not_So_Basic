@@ -48,8 +48,10 @@ prompt:
   if(linenum == 0)
     goto direct;
 
-  if(linenum == 0xFFFF)
-    goto qhow;
+  if(linenum == 0xFFFF){
+    LCD_PrintPROGMEM(CONSOLE_LABEL_MSG);
+    goto prompt;
+  }
 
   // Find the length of what is left, including the (yet-to-be-populated) line header
   linelen = 0;
@@ -78,11 +80,11 @@ prompt:
   }
 #endif
 
-  *((unsigned short *)txtpos) = linenum;
+  *((unsigned int *)txtpos) = linenum;
   txtpos[sizeof(LINENUM)] = linelen;
 
   // Merge it into the rest of the program
-  start = findline();
+  start = find_ProgramLine( linenum);
 
   // If a line with that number exists, then remove it
   if(start != program_end && *((LINENUM *)start) == linenum)
@@ -142,19 +144,6 @@ prompt:
     }
     program_end = newEnd;
   }
-  goto prompt;
-
-unimplemented:
-  print_PROGMEM(unimplimentedmsg);
-  goto prompt;
-
-qhow: 
-  print_PROGMEM(howmsg);
-  goto prompt;
-
-qsorry: 
-  print_PROGMEM(sorrymsg);
-  program_Reset();
   goto prompt;
 
 run_next_statement:
@@ -256,16 +245,18 @@ interperateAtTxtpos:
   case KW_IF:
     short int val;
     val = parse_Expression();
-    if(expression_error || *txtpos == NL)
-      goto qhow;
+    if(expression_error || *txtpos == NL){
+      LCD_PrintPROGMEM(CONSOLE_ARGUMENT_MSG);
+      goto prompt;
+    }
     if(val != 0)
       goto interperateAtTxtpos;
     goto execnextline;
   case KW_GOTO:
-    linenum = parse_Expression();
-    if(expression_error || *txtpos != NL)
-      goto qhow;
-    current_line = findline();
+    linenum = parse_Integer( true);
+    if(validate_LabelExpression()) goto prompt;
+    current_line = find_ProgramLine( linenum);
+    if(validate_LineExists( linenum)) goto prompt;
     goto execline;
   case KW_GOSUB:
     goto gosub;
@@ -365,7 +356,11 @@ forloop:
   
     if(!expression_error && *txtpos == NL){
       struct stack_for_frame *f;
-      if(stack_ptr + sizeof(struct stack_for_frame) < stack_limit) goto qsorry;
+      if(stack_ptr + sizeof(struct stack_for_frame) < stack_limit){
+        print_PROGMEM(sorrymsg);
+        program_Reset();
+        goto prompt;
+      }
       stack_ptr -= sizeof(struct stack_for_frame);
       f = (struct stack_for_frame *)stack_ptr;
       ((short int *)variables_begin)[var-'A'] = initial;
@@ -378,31 +373,38 @@ forloop:
       goto run_next_statement;
     }
   }
-  goto qhow;
+  LCD_PrintPROGMEM(CONSOLE_ARGUMENT_MSG);
+  goto prompt;
 
 gosub:
-  linenum = parse_Expression();
+  linenum = parse_Integer( true);
   if(!expression_error && *txtpos == NL)
   {
     struct stack_gosub_frame *f;
-    if(stack_ptr + sizeof(struct stack_gosub_frame) < stack_limit)
-      goto qsorry;
-
+    if(stack_ptr + sizeof(struct stack_gosub_frame) < stack_limit){
+      print_PROGMEM(sorrymsg);
+      program_Reset();
+      goto prompt;
+    }
     stack_ptr -= sizeof(struct stack_gosub_frame);
     f = (struct stack_gosub_frame *)stack_ptr;
     f->frame_type = STACK_GOSUB_FLAG;
     f->txtpos = txtpos;
     f->current_line = current_line;
-    current_line = findline();
+    current_line = find_ProgramLine( linenum);
     goto execline;
   }
-  goto qhow;
+  LCD_PrintPROGMEM(CONSOLE_LABEL_MSG);
+  goto prompt;
 
 next:
   // Fnd the variable name
   ignore_Blanks();
-  if(*txtpos < 'A' || *txtpos > 'Z')
-    goto qhow;
+  if(*txtpos < 'A' || 'Z' < *txtpos){
+    Serial.println("Next");
+    LCD_PrintPROGMEM(CONSOLE_ARGUMENT_MSG);
+    goto prompt;
+  }
   txtpos++;
   ignore_Blanks();
   if( validate_EndStatement()) goto prompt;
@@ -459,15 +461,18 @@ gosub_return:
     }
   }
   // Didn't find the variable we've been looking for
-  goto qhow;
+  LCD_PrintPROGMEM(CONSOLE_ARGUMENT_MSG);
+  goto prompt;
 
 assignment:
   {
     short int value;
     short int *var;
 
-    if(*txtpos < 'A' || *txtpos > 'Z')
-      goto qhow;
+    if(*txtpos < 'A' || *txtpos > 'Z'){
+      LCD_PrintPROGMEM(CONSOLE_ARGUMENT_MSG);
+      goto prompt;
+    }
     var = (short int *)variables_begin + *txtpos - 'A';
     txtpos++;
     if( validate_CharExpression( '=')) goto prompt;

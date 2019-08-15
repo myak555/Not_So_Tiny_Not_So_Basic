@@ -64,7 +64,7 @@ static bool process_KW_LIST(){
   unsigned char *ptr = program;
   while(ptr<program_end){
     long line_number = ptr[1];
-    line_number = (line_number << 4) + ptr[0];
+    line_number = (line_number << 8) + ptr[0];
     byte line_length = ptr[2];
     if( line_number < a){
       ptr += line_length;

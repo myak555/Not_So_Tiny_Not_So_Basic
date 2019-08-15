@@ -69,6 +69,34 @@ static bool validate_NLExpression(){
 }
 
 //
+// Checks if the value at text position is new line
+//
+static bool validate_LabelExpression(){
+  if(!expression_error && *txtpos == NL) return false;
+  LCD_PrintPROGMEM(CONSOLE_ARGUMENT_MSG);
+  if( current_line == 0) return true;
+  byte tmp = *txtpos;
+  *txtpos = NULLCHAR;
+  LCD_Message[0] = NULLCHAR;
+  append_Message_String( LCD_Message, current_line+3);
+  append_Message_String( LCD_Message, "^");
+  *txtpos = tmp;
+  append_Message_String( LCD_Message, txtpos);
+  LCD_PrintString(LCD_Message);
+  return true;
+}
+
+//
+// Checks if the value at text position is new line
+//
+static bool validate_LineExists( long l){
+  if( current_line < program_end) return false;
+  int i = copy_Message_PROGMEM( CONSOLE_LABEL_MSG, LCD_Message);
+  snprintf( LCD_Message+i, LCD_TEXT_BUFFER_LINE_LENGTH-i, "%04u", l);        
+  return true;
+}
+
+//
 // Checks if the value at text position is a particular character
 //
 static bool validate_CharExpression( char c){

@@ -151,23 +151,6 @@ static void getln(char prompt)
 }
 
 /***************************************************************************/
-static unsigned char *findline(void)
-{
-  unsigned char *line = program_start;
-  while(1)
-  {
-    if(line == program_end)
-      return line;
-
-    if(((LINENUM *)line)[0] >= linenum)
-      return line;
-
-    // Add the line length onto the current address, to get to the next line;
-    line += line[sizeof(LINENUM)];
-  }
-}
-
-/***************************************************************************/
 static void toUppercaseBuffer(void)
 {
   unsigned char *c = program_end+sizeof(LINENUM);

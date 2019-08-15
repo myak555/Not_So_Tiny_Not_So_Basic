@@ -158,8 +158,7 @@ static unsigned char * program_LoadLine( unsigned char *ptr, File f0){
     }
     ptr[l] = NULLCHAR;
     txtpos = ptr;
-    int line_number = (int)parse_Integer( true);
-    *ptri = line_number;
+    *ptri = (unsigned int)parse_Integer( true);
     l = 3; // leave space for line length
     break; 
   }
@@ -238,7 +237,7 @@ static bool process_KW_SAVE(){
   unsigned char *ptr = program;
   while(ptr<program_end){
     long line_number = ptr[1];
-    line_number = (line_number << 4) + ptr[0];
+    line_number = (line_number << 8) + ptr[0];
     byte line_length = ptr[2];
     snprintf( LCD_Message, LCD_TEXT_BUFFER_LINE_LENGTH, "%04u ", line_number);
     byte l = strlen(LCD_Message);
@@ -397,7 +396,7 @@ static bool process_KW_ESAVE(){
   unsigned char *ptr = program;
   while(ptr<program_end){
     long line_number = ptr[1];
-    line_number = (line_number << 4) + ptr[0];
+    line_number = (line_number << 8) + ptr[0];
     byte line_length = ptr[2];
     snprintf( LCD_Message, LCD_TEXT_BUFFER_LINE_LENGTH, "%u ", line_number);
     byte l = strlen(LCD_Message);
@@ -520,7 +519,8 @@ static int append_Message_PROGMEM( char *dest, const unsigned char *msg){
 static int append_Message_String( char *dest, char *msg){
   int i=strlen( dest);
   while( i<LCD_TEXT_BUFFER_LINE_LENGTH-1){
-    char c = pgm_read_byte( msg++ );
+    //char c = pgm_read_byte( msg++ );
+    char c = *msg++;
     dest[i++] = c;
     if( c == NULLCHAR) break;
     if( c == NL){
