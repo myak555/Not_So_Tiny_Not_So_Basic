@@ -4,7 +4,7 @@ Current functionality implemented and tested:
 	(*) feature reworked / rewritten;
 	(/) feature unchanged.
 
-(*) Major rework of expression handling. Instead of 4 support 7 levels of operation priority:
+(*) Major rework of expression handling. Now supports 7 levels of operation priority (TinyBASIC has only 4):
 	1(*) unary + and -, numeric entry, functions and brackets; functions can handle multiple parameters, e.g. POW(2,3);
 	2(+) a power b as a**b;
 	3(*) division, multiplication, (+)remainder as %;
@@ -23,11 +23,11 @@ Current functionality implemented and tested:
 (*) MEM - refactored, optimized for small screens. Other statements can execute in the same line.
 (/) NEW - unchanged.
 (*) DELAY milliseconds - refactored.
-(*) AWRITE pin, value - rewritten, now checks pin availability.
+(*) AWRITE pin, value - rewritten, now checks pin availability to prevent clash with SD, XMEM, SCREEN.
 (*) DWRITE pin, value - rewritten, now accept TRUE and FALSE as values.
 (*) TONEW frequency, duration - rewritten.
 (*) TONE frequency, duration - rewritten.
-(/) NOTONE  - unchanged.
+(/) NOTONE - unchanged.
 (*) EFORMAT - rewritten. Other statements can execute in the same line.
 (*) ELIST - rewritten. Other statements can execute in the same line.
 (*) ECHAIN - rewritten.
@@ -58,4 +58,3 @@ Current functionality implemented and tested:
 (*) RND(expression) - refactored.
 (+) SHOW(line_number) - prints one line, returns address.
 (+) DUMP(address, n_bytes) - prints memory dump.
-
