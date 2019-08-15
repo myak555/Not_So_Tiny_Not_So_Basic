@@ -13,11 +13,13 @@ Current functionality implemented and tested:
 	6(+) logical NOT;
 	7(+) logical AND / OR, such as 17 <= A AND A <= 34 AND NOT B.
 
-(*) FILES [folder_name] - rewritten; now can handle folders on SD. Optimized for small screens. Other statements can execute in the same line.
+(*) FILES [folder_name] - rewritten; now can handle folders on SD. Optimized for small screens.
+	Other statements can execute in the same line. Bug that prevented FILES to work after LOAD is fixed.
 (*) CHAIN [folder_name/]file_name - rewritten; now can handle folders on SD.
 (*) LOAD [folder_name/]file_name - rewritten; now can handle folders on SD.
 (*) SAVE [folder_name/]file_name - rewritten; now can handle folders on SD. Other statements can execute in the same line.
-(*) LIST [from_line][, to_line] - rewritten, optimized for small screens, added from and to options. Other statements can execute in the same line.
+(*) LIST [from_line][, to_line] - rewritten, optimized for small screens, added from and to options.
+	Other statements can execute in the same line.
 (*) MEM - refactored, optimized for small screens. Other statements can execute in the same line.
 (/) NEW - unchanged.
 (*) DELAY milliseconds - refactored.
@@ -35,8 +37,10 @@ Current functionality implemented and tested:
 (/) RUN.
 (/) LET var = value.
 (/) IF expression.
-(*) GOTO line_number - refactored. Negative line numbers are not allowed. Computing GOTO, e.g. GOTO 100+10*I is not allowed (results in ugly programming practices).
-(*) GOSUB line_number - refactored. Negative line numbers are not allowed. Computing GOSUB, e.g. GOSUB 100+10*I is not allowed.
+(*) GOTO line_number - refactored. Negative line numbers are not allowed.
+	Computing GOTO, e.g. GOTO 100+10*I is not allowed (results in ugly programming practices).
+(*) GOSUB line_number - refactored. Negative line numbers are not allowed.
+	Computing GOSUB, e.g. GOSUB 100+10*I is not allowed.
 (/) RETURN.
 (/) REM <any_text>.
 (/) FOR var=<from> TO <to> [STEP <step>].
