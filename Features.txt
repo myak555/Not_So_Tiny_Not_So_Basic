@@ -35,8 +35,8 @@ Current functionality implemented and tested:
 (/) RUN.
 (/) LET var = value.
 (/) IF expression.
-(/) GOTO line_number.
-(/) GOSUB line_number.
+(*) GOTO line_number - refactored. Negative line numbers are not allowed. Computing GOTO, e.g. GOTO 100+10*I is not allowed (results in ugly programming practices).
+(*) GOSUB line_number - refactored. Negative line numbers are not allowed. Computing GOSUB, e.g. GOSUB 100+10*I is not allowed.
 (/) RETURN.
 (/) REM <any_text>.
 (/) FOR var=<from> TO <to> [STEP <step>].
