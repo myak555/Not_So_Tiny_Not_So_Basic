@@ -110,6 +110,7 @@ static bool SD_File_Out_Enabled = false;
 int eepos = 0;
 static const unsigned char EEPROM_TOTAL_MSG[]           PROGMEM = " EEPROM total: ";
 static const unsigned char EEPROM_AVAILABLE_MSG[]       PROGMEM = " EEPROM free : ";
+static const unsigned char EEPROM_GOING_MSG[]           PROGMEM = " EEPROM : ";
 static const unsigned char EEPROM_FORMAT_MSG[]          PROGMEM = " EEPROM clear";
 #endif
 
@@ -199,8 +200,6 @@ U8G2_ST7920_128X64_F_HW_SPI u8g2(U8G2_R0, LCD_CS_PIN, LCD_RESET);
 
 static const unsigned char PIN_PWM_ERROR_MSG[]       PROGMEM = " No PWM support on pin ";
 static const unsigned char PIN_ALLOCATED_ERROR_MSG[] PROGMEM = " Pin in use: ";
-
-typedef short unsigned LINENUM;
 
 #ifdef ARDUINO
   #define ECHO_CHARS 1

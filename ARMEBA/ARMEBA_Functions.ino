@@ -29,21 +29,6 @@ static bool process_KW_POKE(){
 }
 
 //
-// Prints one program line to LCD and console
-//
-static void LCD_PrintProgLine( long line_number, byte line_length, unsigned char *ptr){
-  snprintf( LCD_Message, LCD_TEXT_BUFFER_LINE_LENGTH, "%03u ", line_number);
-  byte j = strlen(LCD_Message);
-  for( byte i=3; i<line_length && j<LCD_TEXT_BUFFER_LINE_LENGTH-1; i++, j++){
-    if( ptr[i] == NL) LCD_Message[j] = NULLCHAR;
-    else LCD_Message[j] = ptr[i];
-    if( LCD_Message[j] == NULLCHAR) break;
-  }
-  LCD_Message[LCD_TEXT_BUFFER_LINE_LENGTH-1] = NULLCHAR;
-  LCD_PrintString( LCD_Message);  
-}
-
-//
 // LIST [nStart][,nEnd] - outputs line numbers
 //
 static bool process_KW_LIST(){
@@ -61,18 +46,77 @@ static bool process_KW_LIST(){
     }
   }
   if( b<a) b = a+10;
-  unsigned char *ptr = program;
+  unsigned char *ptr = program_start;
   while(ptr<program_end){
-    long line_number = ptr[1];
-    line_number = (line_number << 8) + ptr[0];
-    byte line_length = ptr[2];
-    if( line_number < a){
-      ptr += line_length;
-      continue;
-    }  
+    long line_number = Program_Line_Number(ptr);
     if( line_number > b) break;
-    LCD_PrintProgLine( line_number, line_length, ptr);
-    ptr += line_length;
+    if( line_number >= a) LCD_PrintProgLine( ptr);
+    ptr = Program_Line_Get_Next( ptr);
   }
+  return false;
+}
+
+//
+// GOTO line_number - universally hated, but so far necessary
+//
+static bool process_KW_GOTO(){
+  linenum = parse_Integer( true);
+  if(validate_LabelExpression()) return true;
+  unsigned char *previous_line = current_line;
+  current_line = Program_Line_Find( linenum);
+  if(validate_LineExists(current_line)) return true;
+  return false;
+}
+
+//
+// INPUT variable[,question] - inputs an expression into a variable
+//
+static bool process_KW_INPUT(){
+  if( validate_CapitalLetterExpression()) return true;
+  unsigned char var = *txtpos++;
+  ignore_Blanks();
+  if( *txtpos == ','){
+    txtpos++;
+    parse_String( LCD_Message);
+    if( validate_ExpressionError()) return true;
+  }
+  else{
+    if( validate_EndStatement()) return true;
+    LCD_Message[0] = var;
+    LCD_Message[1] = NULLCHAR;
+    append_Message_PROGMEM( LCD_Message, CONSOLE_INPUT_MSG, false);    
+  }
+  long value = 0L;
+  unsigned char *tmp = txtpos;
+  do{
+    LCD_PrintString( LCD_Message);
+    getln( ' ' );
+    toUppercaseBuffer();
+    txtpos = program_end+sizeof(LINE_NUMBER_TYPE);
+    ignore_Blanks();
+    value = parse_Expression();
+    if( expression_error) LCD_PrintPROGMEM( CONSOLE_ARGUMENT_MSG);
+    } while(expression_error);
+  ((short int *)variables_begin)[var-'A'] = value;
+  txtpos = tmp;
+  return false;
+}
+
+//
+// Assignment variable = expression - LET keyword is dropped
+//
+static bool process_Assignment(){
+  if( validate_CapitalLetterExpression()) return true;
+  if( isAlpha( txtpos[1])){
+    while(  isAlphaNumeric( *txtpos)) txtpos++;
+    LCD_PrintError(CONSOLE_UNKNOWN_MSG);
+    return true;      
+  }
+  short int *var = (short int *)variables_begin + *txtpos++ - 'A';
+  if( validate_CharExpression( '=')) return true;
+  long value = parse_Expression();
+  if( validate_ExpressionError()) return true;
+  if( validate_EndStatement()) return true;
+  *var = value;
   return false;
 }

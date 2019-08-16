@@ -80,19 +80,19 @@ prompt:
   }
 #endif
 
-  *((unsigned int *)txtpos) = linenum;
-  txtpos[sizeof(LINENUM)] = linelen;
+  *((LINE_NUMBER_TYPE *)txtpos) = linenum;
+  txtpos[LINE_LENGTH_OFFSET] = linelen;
 
   // Merge it into the rest of the program
-  start = find_ProgramLine( linenum);
+  start = Program_Line_Find( linenum);
 
   // If a line with that number exists, then remove it
-  if(start != program_end && *((LINENUM *)start) == linenum)
+  if(start != program_end && *((LINE_NUMBER_TYPE *)start) == linenum)
   {
     unsigned char *dest, *from;
     unsigned tomove;
 
-    from = start + start[sizeof(LINENUM)];
+    from = start + start[sizeof(LINE_NUMBER_TYPE)];
     dest = start;
 
     tomove = program_end - from;
@@ -106,7 +106,7 @@ prompt:
     program_end = dest;
   }
 
-  if(txtpos[sizeof(LINENUM)+sizeof(char)] == NL) // If the line has no txt, it was just a delete
+  if(txtpos[LINE_START_OFFSET] == NL) // If the line has no txt, it was just a delete
     goto prompt;
 
   // Make room for the new line, either all in one hit or lots of little shuffles
@@ -153,14 +153,14 @@ run_next_statement:
   goto interperateAtTxtpos;
 
 direct: 
-  txtpos = program_end+sizeof(LINENUM);
+  txtpos = program_end+sizeof(LINE_NUMBER_TYPE);
   if(*txtpos == NL)
     goto prompt;
 
 interperateAtTxtpos:
   if(check_Console_Break())
   {
-    print_PROGMEM(CONSOLE_INTERRUPT_MSG);
+    LCD_PrintPROGMEM(CONSOLE_INTERRUPT_MSG);
     program_Reset();
     goto prompt;
   }
@@ -240,8 +240,6 @@ interperateAtTxtpos:
     goto execline;
   case KW_NEXT:
     goto next;
-  case KW_LET:
-    goto assignment;
   case KW_IF:
     short int val;
     val = parse_Expression();
@@ -253,10 +251,7 @@ interperateAtTxtpos:
       goto interperateAtTxtpos;
     goto execnextline;
   case KW_GOTO:
-    linenum = parse_Integer( true);
-    if(validate_LabelExpression()) goto prompt;
-    current_line = find_ProgramLine( linenum);
-    if(validate_LineExists( linenum)) goto prompt;
+    if( process_KW_GOTO()) goto prompt;
     goto execline;
   case KW_GOSUB:
     goto gosub;
@@ -268,7 +263,8 @@ interperateAtTxtpos:
   case KW_FOR:
     goto forloop; 
   case KW_INPUT:
-    goto input; 
+    if( process_KW_INPUT()) goto prompt;
+    goto run_next_statement;
   case KW_PRINT:
   case KW_QMARK:
     goto print;
@@ -285,9 +281,9 @@ interperateAtTxtpos:
   case KW_BYE:
     // Leave the basic interperater - this is currently the only way to restart the Arduino loop
     return;
-
   case KW_DEFAULT:
-    goto assignment;
+    if( process_Assignment()) goto prompt;
+    goto run_next_statement;
   default:
     break;
   }
@@ -295,39 +291,15 @@ interperateAtTxtpos:
 execnextline:
   if(current_line == NULL)    // Processing direct commands?
     goto prompt;
-  current_line +=  current_line[sizeof(LINENUM)];
+  current_line = Program_Line_Get_Next( current_line);
 
 execline:
-  if(current_line == program_end){ // Out of lines to run
+  if(current_line >= program_end){ // Out of lines to run
     program_Reset();
     goto prompt;
   }
-  txtpos = current_line+sizeof(LINENUM)+sizeof(char);
+  txtpos = Program_Line_Body( current_line);
   goto interperateAtTxtpos;
-
-input:
-  {
-    unsigned char var;
-    int value;
-    if( validate_CapitalLetterExpression()) goto prompt;
-    var = *txtpos;
-    txtpos++;
-    ignore_Blanks();
-    if( validate_EndStatement()) goto prompt;
-inputagain:
-    tmptxtpos = txtpos;
-    getln( '?' );
-    toUppercaseBuffer();
-    txtpos = program_end+sizeof(unsigned short);
-    ignore_Blanks();
-    value = parse_Expression();
-    if(expression_error)
-      goto inputagain;
-    ((short int *)variables_begin)[var-'A'] = value;
-    txtpos = tmptxtpos;
-
-    goto run_next_statement;
-  }
 
 forloop:
   {
@@ -357,7 +329,7 @@ forloop:
     if(!expression_error && *txtpos == NL){
       struct stack_for_frame *f;
       if(stack_ptr + sizeof(struct stack_for_frame) < stack_limit){
-        print_PROGMEM(sorrymsg);
+        LCD_PrintPROGMEM(sorrymsg);
         program_Reset();
         goto prompt;
       }
@@ -382,7 +354,7 @@ gosub:
   {
     struct stack_gosub_frame *f;
     if(stack_ptr + sizeof(struct stack_gosub_frame) < stack_limit){
-      print_PROGMEM(sorrymsg);
+      LCD_PrintPROGMEM(sorrymsg);
       program_Reset();
       goto prompt;
     }
@@ -391,7 +363,7 @@ gosub:
     f->frame_type = STACK_GOSUB_FLAG;
     f->txtpos = txtpos;
     f->current_line = current_line;
-    current_line = find_ProgramLine( linenum);
+    current_line = Program_Line_Find( linenum);
     goto execline;
   }
   LCD_PrintPROGMEM(CONSOLE_LABEL_MSG);
@@ -464,25 +436,6 @@ gosub_return:
   LCD_PrintPROGMEM(CONSOLE_ARGUMENT_MSG);
   goto prompt;
 
-assignment:
-  {
-    short int value;
-    short int *var;
-
-    if(*txtpos < 'A' || *txtpos > 'Z'){
-      LCD_PrintPROGMEM(CONSOLE_ARGUMENT_MSG);
-      goto prompt;
-    }
-    var = (short int *)variables_begin + *txtpos - 'A';
-    txtpos++;
-    if( validate_CharExpression( '=')) goto prompt;
-    value = parse_Expression();
-    if( validate_ExpressionError()) goto prompt;
-    if( validate_EndStatement()) goto prompt;
-    *var = value;
-  }
-  goto run_next_statement;
-
 print:
   // If we have an empty list then just put out a NL
   if(*txtpos == ':' )
@@ -501,7 +454,7 @@ print:
     ignore_Blanks();
     if(print_quoted_string()){;}
     else if(*txtpos == '"' || *txtpos == '\''){
-      report_SyntaxError();
+      LCD_PrintError(CONSOLE_ARGUMENT_MSG);
       goto prompt;
     }
     else{
@@ -522,7 +475,7 @@ print:
       break;
     }
     else{
-      report_SyntaxError();
+      LCD_PrintError(CONSOLE_SYNTAX_MSG);
       goto prompt;
     }
   }

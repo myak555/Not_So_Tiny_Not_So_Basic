@@ -18,7 +18,7 @@ static void init_XRAM(){
   XRAM_ENABLE();
   bitSet(XMCRA, SRE);                   // enable external memory
   XMCRB=0;                              // need all 64K. no pins released
-  bitClear(XMCRA, SRW11);               // no waits
+  bitClear(XMCRA, SRW11);               // no waits  
   bitClear(XMCRA, SRW10);
 }
 
@@ -27,25 +27,25 @@ static void init_XRAM(){
 // MEM
 //
 static void process_KW_MEM( bool usage){
-  int j = copy_Message_PROGMEM( XRAM_TOTAL_MSG, LCD_Message);
+  int j = append_Message_PROGMEM( LCD_Message, XRAM_TOTAL_MSG, true);
   snprintf( LCD_Message+j, LCD_TEXT_BUFFER_LINE_LENGTH-j, "%lu", XRAM_SIZE);
   LCD_PrintString( LCD_Message);
   if( usage)
   {
     unsigned int avl = variables_begin - program_end;
-    j = copy_Message_PROGMEM( XRAM_AVAILABLE_MSG, LCD_Message);
+    j = append_Message_PROGMEM( LCD_Message, XRAM_AVAILABLE_MSG, true);
     snprintf( LCD_Message+j, LCD_TEXT_BUFFER_LINE_LENGTH-j, "%u", avl);
     LCD_PrintString( LCD_Message);
   }
 
   #ifdef EEPROM_ENABLE
-  j = copy_Message_PROGMEM( EEPROM_TOTAL_MSG, LCD_Message);
+  j = append_Message_PROGMEM( LCD_Message, EEPROM_TOTAL_MSG, true);
   snprintf( LCD_Message+j, LCD_TEXT_BUFFER_LINE_LENGTH-j, "%u", EEPROM.length());
   LCD_PrintString( LCD_Message);
   if(!usage) return;
   for( int i=0; i<EEPROM.length(); i++ ) {
     if( EEPROM.read( i ) != NULLCHAR) continue;
-    j = copy_Message_PROGMEM( EEPROM_AVAILABLE_MSG, LCD_Message);
+    j = append_Message_PROGMEM( LCD_Message, EEPROM_AVAILABLE_MSG, true);
     snprintf( LCD_Message+j, LCD_TEXT_BUFFER_LINE_LENGTH-j, "%u", EEPROM.length()-i);
     LCD_PrintString( LCD_Message);
     return;            
@@ -67,19 +67,20 @@ static void init_SD(){
 
   // due to the way the SD Library works, pin 10 always needs to be 
   // an output, even when your shield uses another line for CS
+  // on MEGA pin 13 is attached to the on-board LED; this does not interfere with SD operation 
   pinMode(10, OUTPUT); // change this to 53 on a generic mega shield
 
   // added soft SPI ports
   if( !SD.begin( 10, 11, 12, 13 )) {
-    print_PROGMEM( SD_ERROR_MSG ); // failure
+    LCD_PrintPROGMEM( SD_ERROR_MSG ); // failure
     return;
   }
   SD_initialized = true; // success
   SD_filename[0] = 0;
-  copy_Message_PROGMEM( SD_SLASH_MSG, SD_directory);
+  append_Message_PROGMEM( SD_directory, SD_SLASH_MSG, true);
 
   #ifdef SD_AUTORUN
-  copy_Message_PROGMEM( SD_AUTORUN_NAME, SD_filename);
+  append_Message_PROGMEM( SD_filename, SD_AUTORUN_NAME, true);
   if( SD.exists( SD_filename)) {
     File f0 = SD.open( SD_filename);
     while( f0.available())
@@ -95,8 +96,8 @@ static void init_SD(){
 // Reports file error or action
 //
 static void report_File(const unsigned char *msg, char *filename){
-  int j = copy_Message_PROGMEM( msg, LCD_Message);
-  snprintf( LCD_Message+j, LCD_TEXT_BUFFER_LINE_LENGTH-j, "%s", filename);
+  int i = append_Message_PROGMEM( LCD_Message, msg, true);
+  snprintf( LCD_Message+i, LCD_TEXT_BUFFER_LINE_LENGTH-i, "%s", filename);
   LCD_PrintString(LCD_Message);  
 }
 
@@ -128,13 +129,13 @@ static bool process_KW_FILES(){
     snprintf( LCD_Message, LCD_TEXT_BUFFER_LINE_LENGTH, " %s", entry.name());
     j = strlen(LCD_Message);
     if( entry.isDirectory() ) {
-      append_Message_PROGMEM( LCD_Message, SD_SLASH_MSG);
-      while( j<20) j = append_Message_PROGMEM( LCD_Message, SD_INDENT_MSG);
-      append_Message_PROGMEM( LCD_Message, SD_DIR_MSG);
+      j = append_Message_PROGMEM( LCD_Message, SD_SLASH_MSG, false);
+      while( j<20) j = append_Message_PROGMEM( LCD_Message, SD_INDENT_MSG, false);
+      append_Message_PROGMEM( LCD_Message, SD_DIR_MSG, false);
       dir_count++;
     }
     else {
-      while( j<18) j = append_Message_PROGMEM( LCD_Message, SD_INDENT_MSG);
+      while( j<18) j = append_Message_PROGMEM( LCD_Message, SD_INDENT_MSG, false);
       snprintf( LCD_Message+j, LCD_TEXT_BUFFER_LINE_LENGTH-j, "%7lu", (unsigned long)entry.size());
       file_count++;
     }
@@ -148,18 +149,17 @@ static bool process_KW_FILES(){
 }
 
 static unsigned char * program_LoadLine( unsigned char *ptr, File f0){
-  unsigned int *ptri = (unsigned int *)ptr;
   byte l = 0;
   while( f0.available()){
     ptr[l] = f0.read();
-    if( l<10 && is_Decimal( ptr+l)){
+    if( l<10 && isDigit( ptr[l])){
       l++;
       continue;
     }
     ptr[l] = NULLCHAR;
     txtpos = ptr;
-    *ptri = (unsigned int)parse_Integer( true);
-    l = 3; // leave space for line length
+    Program_Line_Write_Number( ptr, parse_Integer( true));
+    l = LINE_START_OFFSET; // leave space for line length
     break; 
   }
   while( f0.available()){
@@ -176,8 +176,8 @@ static unsigned char * program_LoadLine( unsigned char *ptr, File f0){
     if( c == CR) continue;
     ptr[l++] = c;
   }
-  ptr[2] = l;
-  return ptr + l;
+  Program_Line_Write_Length( ptr, l);
+  return Program_Line_Get_Next( ptr);
 }
 
 //
@@ -234,17 +234,16 @@ static bool process_KW_SAVE(){
     }
   }
   File f0 = SD.open( SD_filename, FILE_WRITE );
-  unsigned char *ptr = program;
+  unsigned char *ptr = program_start;
   while(ptr<program_end){
-    long line_number = ptr[1];
-    line_number = (line_number << 8) + ptr[0];
-    byte line_length = ptr[2];
+    LINE_NUMBER_TYPE line_number = Program_Line_Number(ptr);
+    byte line_length = Program_Line_Length(ptr);
     snprintf( LCD_Message, LCD_TEXT_BUFFER_LINE_LENGTH, "%04u ", line_number);
     byte l = strlen(LCD_Message);
     for( byte i=0; i<l; i++) f0.write( LCD_Message[i]);
     for( byte i=3; i<line_length-1; i++) f0.write( ptr[i]);
     f0.write( NL);
-    f0.write( CR);
+    f0.write( CR); // obey CR convention
     ptr += line_length;
   }
   f0.close();
@@ -350,30 +349,27 @@ static bool process_KW_ELIST(){
 // ELOAD
 //
 static bool process_KW_ELOAD( bool chain){
-  triggerRun = false;
   report_File(SD_LOADING_MSG, "from EEPROM");
   program_end = program_start;
-  unsigned int *tmp = (unsigned int *)program_end;
   byte pos = 0;
   bool ln_Found = false;
   for( int i=0; i<EEPROM.length(); i++ ){
     char c = EEPROM.read( i );
     if( c == NULLCHAR) break;
     program_end[pos] = c;
-    if( !ln_Found && !is_Decimal( program_end + pos)){
+    if( !ln_Found && !isDigit( program_end[pos])){
       txtpos = program_end; 
-      int line_number = (int)parse_Integer( true);
+      LINE_NUMBER_TYPE line_number = parse_Integer( true);
       if( expression_error) return true;
       ln_Found = true;
-      *tmp = line_number;
-      pos = 3;
+      Program_Line_Write_Number( program_end, line_number);
+      pos = LINE_START_OFFSET; // leave space for line length
       continue;
     }
     pos++;
     if( c == NL){
-      program_end[2] = pos;
+      Program_Line_Write_Length(program_end, pos);
       program_end += pos;
-      tmp = (unsigned int *)program_end;
       pos = 0;
       ln_Found = false;
     }
@@ -393,19 +389,16 @@ static bool process_KW_ELOAD( bool chain){
 static bool process_KW_ESAVE(){
   report_File(SD_SAVING_MSG, "to EEPROM");
   int ea = 0;
-  unsigned char *ptr = program;
+  unsigned char *ptr = program_start;
   while(ptr<program_end){
-    long line_number = ptr[1];
-    line_number = (line_number << 8) + ptr[0];
-    byte line_length = ptr[2];
-    snprintf( LCD_Message, LCD_TEXT_BUFFER_LINE_LENGTH, "%u ", line_number);
+    snprintf( LCD_Message, LCD_TEXT_BUFFER_LINE_LENGTH, "%u ", Program_Line_Number( ptr));
     byte l = strlen(LCD_Message);
-    for( byte i=0; i<10; i++){
-      if( LCD_Message[i] == NULLCHAR) break;
+    for( byte i=0; i<l; i++){
       if( ea>=EEPROM.length()-1) break;
       EEPROM.write( ea++, LCD_Message[i]);
     }
-    for( byte i=3; i<line_length; i++){
+    byte line_length = Program_Line_Length( ptr);
+    for( byte i=LINE_START_OFFSET; i<line_length; i++){
       if( ea>=EEPROM.length()-1) break;
       EEPROM.write( ea++, ptr[i]);
       if( ptr[i] == NULLCHAR) break;
@@ -421,15 +414,16 @@ static bool process_KW_ESAVE(){
 // EFORMAT - clears eprom contents (with zeros)
 //
 static bool process_KW_EFORMAT(){
-  copy_Message_PROGMEM(SD_SLASH_MSG, LCD_Message);
+  LCD_ScrollUp();
+  append_Message_PROGMEM(LCD_Message, EEPROM_GOING_MSG, true);
   u8g2.firstPage();  
   for( int i=0, j=7; i<LCD_SCREEN_ROWS-1; i++, j+=8)
     u8g2.drawUTF8(0,j,LCD_Line_Pointers[i]);
   u8g2.nextPage();
   for( int i=0; i<EEPROM.length(); i++ ){
-    EEPROM.write( i, 0x80);
-    if( (i % 256) != 0) continue;
-    append_Message_PROGMEM( LCD_Message, SD_SLASH_MSG);
+    EEPROM.write( i, 0);
+    if( (i % 512) != 0) continue;
+    append_Message_PROGMEM( LCD_Message, SD_SLASH_MSG, false);
     u8g2.drawUTF8(0,63,LCD_Message);
     u8g2.nextPage();    
   }
@@ -480,92 +474,16 @@ static void init_LCD(){
 }
 
 //
-// Converts a PROGMEM massage into a proper memory location;
-// Trims the string to prevent the screen overflow
-// Returns number of bytes in the string
-//
-static int copy_Message_PROGMEM( const unsigned char *msg, char *dest){
-  int i=0;
-  while( i<LCD_TEXT_BUFFER_LINE_LENGTH-1){
-    char c = pgm_read_byte( msg++ );
-    dest[i++] = c;
-    if( c == NULLCHAR) break;
-  }
-  dest[LCD_TEXT_BUFFER_LINE_LENGTH-1] = NULLCHAR;
-  return i-1;
-}
-
-//
-// Appends a PROGMEM massage into a memory location;
-// Trims the string to prevent the screen overflow
-// Returns number of bytes in the string
-//
-static int append_Message_PROGMEM( char *dest, const unsigned char *msg){
-  int i=strlen( dest);
-  while( i<LCD_TEXT_BUFFER_LINE_LENGTH-1){
-    char c = pgm_read_byte( msg++ );
-    dest[i++] = c;
-    if( c == NULLCHAR) break;
-  }
-  dest[LCD_TEXT_BUFFER_LINE_LENGTH-1] = NULLCHAR;
-  return i-1;
-}
-
-//
-// Appends a string massage into a memory location;
-// Trims the string to prevent the screen overflow
-// Returns number of bytes in the string
-//
-static int append_Message_String( char *dest, char *msg){
-  int i=strlen( dest);
-  while( i<LCD_TEXT_BUFFER_LINE_LENGTH-1){
-    //char c = pgm_read_byte( msg++ );
-    char c = *msg++;
-    dest[i++] = c;
-    if( c == NULLCHAR) break;
-    if( c == NL){
-      dest[i-1] = NULLCHAR;
-      break;
-    }
-  }
-  dest[LCD_TEXT_BUFFER_LINE_LENGTH-1] = NULLCHAR;
-  return i-1;
-}
-
-//
-// Prints a message from PROGMEM in any screen location
-//
-static void display_Message_PROGMEM(uint8_t x, uint8_t y, const unsigned char *msg){
-  copy_Message_PROGMEM( msg, LCD_Message);
-  if( !LCD_initialized) return;
-  u8g2.drawUTF8(x,y,LCD_Message);
-}
-
-//
-// Shows a splash screen
-//
-static void display_SplashScreen(){
-  if( !LCD_initialized) return;
-  u8g2.firstPage();  
-  do {
-    u8g2.setFont( u8g2_font_6x12_t_cyrillic);
-    display_Message_PROGMEM(  7, 24, ARMEBA_INITIAL_MSG);
-    u8g2.setFont( u8g2_font_5x8_t_cyrillic);
-    display_Message_PROGMEM( 25, 33, ARMEBA_VERSION_MSG);
-  }while ( u8g2.nextPage() );
-}
-
-//
 // resets stack lables to X, Y, Z;
 // content will do later
 //
 static void STACK_Reset(){
-  copy_Message_PROGMEM( STACK_LABEL_Z, LCD_Stack_Pointers[0]); 
-  copy_Message_PROGMEM( STACK_CONTENT, LCD_Stack_Pointers[1]); 
-  copy_Message_PROGMEM( STACK_LABEL_Y, LCD_Stack_Pointers[2]); 
-  copy_Message_PROGMEM( STACK_CONTENT, LCD_Stack_Pointers[3]); 
-  copy_Message_PROGMEM( STACK_LABEL_X, LCD_Stack_Pointers[4]); 
-  copy_Message_PROGMEM( STACK_CONTENT, LCD_Stack_Pointers[5]); 
+  append_Message_PROGMEM( LCD_Stack_Pointers[0], STACK_LABEL_Z, true); 
+  append_Message_PROGMEM( LCD_Stack_Pointers[1], STACK_CONTENT, true); 
+  append_Message_PROGMEM( LCD_Stack_Pointers[2], STACK_LABEL_Y, true); 
+  append_Message_PROGMEM( LCD_Stack_Pointers[3], STACK_CONTENT, true); 
+  append_Message_PROGMEM( LCD_Stack_Pointers[4], STACK_LABEL_X, true); 
+  append_Message_PROGMEM( LCD_Stack_Pointers[5], STACK_CONTENT, true); 
 }
 
 //
@@ -610,11 +528,11 @@ static void LCD_ScrollUp(){
 //
 // Scrolls screen buffer up one line and prints message
 //
-static void LCD_PrintString( char *addedLine){
+static void LCD_PrintString( char *msg){
   LCD_ScrollUp();
-  strcpy( LCD_Line_Pointers[LCD_SCREEN_ROWS-1], addedLine);
+  strcpy( LCD_Line_Pointers[LCD_SCREEN_ROWS-1], msg);
   LCD_DrawScreen();
-  Serial.println( addedLine);
+  Serial.println( msg);
 }
 
 //
@@ -622,7 +540,7 @@ static void LCD_PrintString( char *addedLine){
 //
 static void LCD_PrintPROGMEM( const unsigned char *msg){
   LCD_ScrollUp();
-  copy_Message_PROGMEM( msg, LCD_Line_Pointers[LCD_SCREEN_ROWS-1]);
+  append_Message_PROGMEM( LCD_Line_Pointers[LCD_SCREEN_ROWS-1], msg, true);
   LCD_DrawScreen();
   Serial.println( LCD_Line_Pointers[LCD_SCREEN_ROWS-1]);
 }
@@ -754,8 +672,8 @@ static bool process_KW_TONE(bool wait_for_completion){
 // Reports pin error or action
 //
 static void report_Pin(const unsigned char *msg, int pinNo){
-  int j = copy_Message_PROGMEM( msg, LCD_Message);
-  snprintf( LCD_Message+j, LCD_TEXT_BUFFER_LINE_LENGTH-j, "%d", pinNo);
+  int i = append_Message_PROGMEM( LCD_Message, msg, true);
+  snprintf( LCD_Message+i, LCD_TEXT_BUFFER_LINE_LENGTH-i, "%d", pinNo);
   LCD_PrintString(LCD_Message);  
 }
 
@@ -780,7 +698,7 @@ static bool process_KW_PWRITE( bool analogue){
   int value = (int)parse_Expression();
   if( validate_ExpressionError()) return true;
   if( analogue){
-    if( (pinNo<2 || pinNo>13) && pinNo != 44  && pinNo != 45 && pinNo != 46){
+    if( (pinNo<2 || pinNo>10) && pinNo != 44  && pinNo != 45 && pinNo != 46){
       report_Pin( PIN_PWM_ERROR_MSG, pinNo);
       return true;
     }
@@ -789,7 +707,10 @@ static bool process_KW_PWRITE( bool analogue){
     analogWrite( pinNo, value );
     return false;
   }
-  if( pinNo<2 || pinNo>22){
+  //
+  // Masked pins in use, so SD card reader and XRAM cannot be busted
+  //
+  if( pinNo<2 || pinNo>22 || pinNo==10 || pinNo==11 || pinNo==12){
     report_Pin( PIN_ALLOCATED_ERROR_MSG, pinNo);
     return true;
   }

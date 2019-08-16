@@ -5,42 +5,6 @@
 /////////////////////////////////////////////////////
 
 //
-// Skips any blanks in the input
-//
-static void ignore_Blanks(){
-  while(*txtpos == SPACE || *txtpos == TAB)
-    txtpos++;
-}
-
-//
-// Returns true if capital letter
-//
-static bool is_CapitalLetter( char *p){
-  return ('A' <= *p) && (*p <= 'Z');
-}
-
-//
-// Returns true if small letter
-//
-static bool is_SmallLetter( char *p){
-  return ('a' <= *p) && (*p <= 'z');
-}
-
-//
-// Returns true if letter
-//
-static bool is_Letter( char *p){
-  return is_CapitalLetter(p) || is_SmallLetter(p);
-}
-
-//
-// Returns true if decimal
-//
-static bool is_Decimal( char *p){
-  return ('0' <= *p) && (*p <= '9');
-}
-
-//
 // Returns true if part of real number
 //
 static bool is_Real( char *p){
@@ -60,12 +24,11 @@ static bool is_Real( char *p){
 }
 
 //
-// Checks if the value at text position is new line
+// Skips any blanks in the input
 //
-static bool validate_NLExpression(){
-  if( *txtpos == NL) return false;
-  report_SyntaxError();
-  return true;
+static void ignore_Blanks(){
+  while(*txtpos == SPACE || *txtpos == TAB)
+    txtpos++;
 }
 
 //
@@ -73,26 +36,26 @@ static bool validate_NLExpression(){
 //
 static bool validate_LabelExpression(){
   if(!expression_error && *txtpos == NL) return false;
-  LCD_PrintPROGMEM(CONSOLE_ARGUMENT_MSG);
-  if( current_line == 0) return true;
-  byte tmp = *txtpos;
-  *txtpos = NULLCHAR;
-  LCD_Message[0] = NULLCHAR;
-  append_Message_String( LCD_Message, current_line+3);
-  append_Message_String( LCD_Message, "^");
-  *txtpos = tmp;
-  append_Message_String( LCD_Message, txtpos);
-  LCD_PrintString(LCD_Message);
+  LCD_PrintError(CONSOLE_ARGUMENT_MSG);
   return true;
 }
 
 //
 // Checks if the value at text position is new line
 //
-static bool validate_LineExists( long l){
+static bool validate_NLExpression(){
+  if( *txtpos == NL) return false;
+  LCD_PrintError(CONSOLE_SYNTAX_MSG);
+  return true;
+}
+
+//
+// Checks if the value at text position is new line
+//
+static bool validate_LineExists( unsigned char *previous_line){
   if( current_line < program_end) return false;
-  int i = copy_Message_PROGMEM( CONSOLE_LABEL_MSG, LCD_Message);
-  snprintf( LCD_Message+i, LCD_TEXT_BUFFER_LINE_LENGTH-i, "%04u", l);        
+  current_line = previous_line;
+  LCD_PrintError(CONSOLE_LABEL_MSG);
   return true;
 }
 
@@ -106,7 +69,7 @@ static bool validate_CharExpression( char c){
     ignore_Blanks();
     return false;
   }
-  report_SyntaxError();
+  LCD_PrintError(CONSOLE_SYNTAX_MSG);
   return true;
 }
 
@@ -115,8 +78,8 @@ static bool validate_CharExpression( char c){
 //
 static bool validate_CapitalLetterExpression(){
   ignore_Blanks();
-  if ( is_CapitalLetter( txtpos)) return false; 
-  report_SyntaxError();
+  if ( isUpperCase(txtpos[0])) return false; 
+  LCD_PrintError(CONSOLE_ARGUMENT_MSG);
   return true;
 }
 
@@ -126,7 +89,7 @@ static bool validate_CapitalLetterExpression(){
 static bool validate_ScantableExpression(const unsigned char *table, int val){
   byte f = locate_Keyword(table);
   if(f == val) return false;
-  report_SyntaxError();
+  LCD_PrintError(CONSOLE_SYNTAX_MSG);
   return true;
 }
 
@@ -145,22 +108,7 @@ static bool validate_EndStatement(){
 //
 static bool validate_ExpressionError(){
   if(!expression_error) return false;
-  report_SyntaxError();
-  if(current_line == NULL) return true;
-  LCD_Message[0] = NULLCHAR;
-  if(*txtpos == NL){
-    append_Message_String( LCD_Message, current_line);
-    append_Message_String( LCD_Message, "^");
-    LCD_PrintString(LCD_Message);
-    return true;
-  }
-  char tmp = *txtpos;
-  *txtpos = NL;
-  append_Message_String( LCD_Message, current_line);
-  append_Message_String( LCD_Message, "^");
-  *txtpos = tmp;
-  append_Message_String( LCD_Message, txtpos);
-  LCD_PrintString(LCD_Message);
+  LCD_PrintError(CONSOLE_SYNTAX_MSG);
   return true;
 }
 
@@ -377,7 +325,7 @@ static short int parse_Expression7(){
   }
 
   // Number entry; first try to parse integer, if does not work, do a float
-  if( is_Decimal( txtpos)){
+  if( isDigit( *txtpos)){
     //unsigned char *tmp = txtpos;
     a = parse_Integer(false);
     if(expression_error) return 0;
@@ -388,14 +336,14 @@ static short int parse_Expression7(){
   }
 
   // Is it a variable reference?
-  if ( is_CapitalLetter( txtpos) && !is_CapitalLetter( txtpos+1)){
+  if ( isUpperCase(txtpos[0]) && !isAlphaNumeric(txtpos[1])){
     a = ((short int *)variables_begin)[*txtpos - 'A'];
     txtpos++;
     return a;
   }
 
   // Is it a function reference?
-  if ( is_CapitalLetter( txtpos) && is_CapitalLetter( txtpos+1)){
+  if ( isAlpha(txtpos[0]) && isAlphaNumeric(txtpos[1])){
     byte f = locate_Keyword(KW_Functions);
     switch(f){
       case FUNC0_LOW:
@@ -411,10 +359,10 @@ static short int parse_Expression7(){
       case FUNC1_PEEK:
       case FUNC1_ABS:
       case FUNC1_AREAD:
-      case FUNC1_DREAD:
       case FUNC1_RND:
       case FUNC1_SHOW:
         return parse_OneParameterFunction(f);
+      case FUNC2_DREAD:
       case FUNC2_DUMP:
       case FUNC2_POW:
         return parse_TwoParameterFunction(f);
@@ -443,27 +391,19 @@ static long parse_OneParameterFunction( byte f){
       if(a < 0) return -a;
       else return a;
     case FUNC1_SHOW:
-      unsigned char *ptr = program;
-      while(ptr<program_end){
-        long line_number = ptr[1];
-        line_number = (line_number << 4) + ptr[0];
-        byte line_length = ptr[2];
-        if( line_number != a){
-          ptr += line_length;
-          continue;
-        }
-        LCD_PrintProgLine( line_number, line_length, ptr);
-        return (long)(ptr-program);
+      unsigned char *address = Program_Line_Find( a);
+      if( address>=program_end){
+        byte i = append_Message_PROGMEM( LCD_Message, CONSOLE_LINENOTFOUND_MSG, true);
+        snprintf( LCD_Message+i, LCD_TEXT_BUFFER_LINE_LENGTH-i, "%03u", a);        
+        LCD_PrintString( LCD_Message);
       }
-      byte i = copy_Message_PROGMEM( CONSOLE_LINENOTFOUND_MSG, LCD_Message);
-      snprintf( LCD_Message+i, LCD_TEXT_BUFFER_LINE_LENGTH-i, "%03u", a);        
-      return (long)(program_start-program);
+      else{
+        LCD_PrintProgLine( address);        
+      }
+      return (long)address-(long)program;
     case FUNC1_AREAD:
       pinMode( a, INPUT );
       return (long)analogRead( a );
-    case FUNC1_DREAD:
-      pinMode( a, INPUT );
-      return (long)digitalRead( a );
     case FUNC1_RND:
       return (long)random( a );
     }
@@ -487,6 +427,10 @@ static long parse_TwoParameterFunction( byte f){
   if( expression_error) return 0L;
   txtpos++;
   switch( f){
+    case FUNC2_DREAD:
+      if( b<1) pinMode( a, INPUT );
+      else pinMode( a, INPUT_PULLUP);
+      return (long)digitalRead( a );
     case FUNC2_DUMP:
       for( int i=0; i<b; i++){
         byte c = program[a+i];
@@ -539,7 +483,7 @@ static long parse_BracketPair(){
 //
 static long parse_Integer( bool reset_error){
   if( reset_error){
-    if( !is_Decimal(txtpos)){
+    if( !isDigit( *txtpos)){
       expression_error = true;
       return 0L;
     }
@@ -547,7 +491,7 @@ static long parse_Integer( bool reset_error){
   }
   if(*txtpos == '0'){
     txtpos++;
-    if( is_Decimal(txtpos)) return parse_Integer(false);
+    if( isDigit( *txtpos)) return parse_Integer(false);
     ignore_Blanks();
     return 0L;
   }
@@ -559,9 +503,39 @@ static long parse_Integer( bool reset_error){
       return 0L;
     }
     txtpos++;
-  } while( is_Decimal( txtpos));
+  } while( isDigit( *txtpos));
   ignore_Blanks();
   return a;
+}
+
+//
+// Parses a string into a destination
+//
+static void parse_String( unsigned char *dest){
+  ignore_Blanks();
+  expression_error = (*txtpos != '\"');
+  if( expression_error) return;
+  int pos = 0;
+  while(true){
+    txtpos++;
+    byte c = *txtpos;
+    if( c == '\"'){
+      txtpos++;
+      ignore_Blanks();
+      break;
+    }
+    if( c == NL || c == NULLCHAR){
+      expression_error = true;
+      break; 
+    }
+    if( c == '\\' && txtpos[1] == '\"'){
+      if( pos < LCD_TEXT_BUFFER_LINE_LENGTH-1) dest[pos++] = txtpos[1];
+      txtpos++;
+      continue; 
+    }
+    if( pos < LCD_TEXT_BUFFER_LINE_LENGTH-1) dest[pos++] = c;
+  }
+  LCD_Message[pos] = NULLCHAR;
 }
 
 //
