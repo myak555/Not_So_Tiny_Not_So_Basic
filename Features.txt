@@ -14,7 +14,7 @@ Current functionality implemented and tested:
 	7(+) logical AND / OR, such as 17 <= A AND A <= 34 AND NOT B.
 
 (*) FILES [folder_name] - rewritten; now can handle folders on SD. Optimized for small screens.
-	Other statements can execute in the same line. Bug that prevented FILES to work after LOAD is fixed.
+	Other statements can execute in the same line. Bug that prevented FILES to work after LOAD has been fixed!
 (*) CHAIN [folder_name/]file_name - rewritten; now can handle folders on SD.
 (*) LOAD [folder_name/]file_name - rewritten; now can handle folders on SD.
 (*) SAVE [folder_name/]file_name - rewritten; now can handle folders on SD. Other statements can execute in the same line.
@@ -34,27 +34,30 @@ Current functionality implemented and tested:
 (*) ELOAD - rewritten.
 (*) ESAVE - rewritten. Other statements can execute in the same line.
 (*) RSEED value - rewritten.
-(/) RUN.
-(/) LET var = value.
+(/) RUN - unchanged.
+(-) LET var = value. LET is useless command. Just use assignments.
+        (arguably in IF a<0 LET a=0 may be useful for clarity; need to put THEN ELSE later and the problem
+	will go away)
 (/) IF expression.
 (*) GOTO line_number - refactored. Negative line numbers are not allowed.
 	Computing GOTO, e.g. GOTO 100+10*I is not allowed (results in ugly programming practices).
 (*) GOSUB line_number - refactored. Negative line numbers are not allowed.
 	Computing GOSUB, e.g. GOSUB 100+10*I is not allowed.
 (/) RETURN.
-(/) REM <any_text>.
+(/) REM <any_text>, (also ' <any_text>).
 (/) FOR var=<from> TO <to> [STEP <step>].
 (/) NEXT var.
-(/) INPUT var.
+(*) INPUT var[, question] - rewritten. Now can ask user e.g. INPUT A,"Enter coeff: "; also 
+        changed incorrect entry procedure.
 (/) PRINT string/expression.
 (*) POKE address, value - rewritten.
 (*) PEEK( address) - rewritten.
 (/) END.
 (/) STOP.
-(/) BYE.
+(/) BYE - will be replaced with RESET.
 (*) ABS(expression) - refactored.
 (*) AREAD(pin_number) - refactored.
-(*) DREAD(pin_number) - refactored.
+(*) DREAD(pin_number,pullup) - refactored. Now can set pull-up resistor on the pin.
 (*) RND(expression) - refactored.
 (+) SHOW(line_number) - prints one line, returns address.
 (+) DUMP(address, n_bytes) - prints memory dump.
