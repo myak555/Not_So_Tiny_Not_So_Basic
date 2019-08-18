@@ -49,12 +49,13 @@ Current functionality implemented and tested:
 (/) NEXT var.
 (*) INPUT var[, question] - rewritten. Now can ask user e.g. INPUT A,"Enter coeff: "; also 
         changed incorrect entry procedure.
-(/) PRINT string/expression.
+(*) PRINT string/expression - rewritten and optimized for small and slow screens.
 (*) POKE address, value - rewritten.
 (*) PEEK( address) - rewritten.
-(/) END.
+(-) END - removed as useless (it was a synonim for STOP)
 (/) STOP.
-(/) BYE - will be replaced with RESET.
+(-) BYE - replaced with RESET.
+(+) RESET - on microprocessors one cannot leave the system.
 (*) ABS(expression) - refactored.
 (*) AREAD(pin_number) - refactored.
 (*) DREAD(pin_number,pullup) - refactored. Now can set pull-up resistor on the pin.
