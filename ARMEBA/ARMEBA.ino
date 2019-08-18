@@ -25,7 +25,12 @@
 #include "MEGA_Console.h"
 
 // controls autorun settings
-static bool triggerRun = false;
+enum {
+  PRG_CONSOLE = 0,
+  PRG_RPN,
+  PRG_RUNNING
+};
+static byte PRG_State = PRG_CONSOLE;
 
 struct stack_for_frame {
   char frame_type;
@@ -82,11 +87,47 @@ byte linelen;
 //
 void setup()
 {
+  Hard_Reset();
+}
+
+//
+// Arduino sketch runs in a loop
+// TODO: separate Kludge() monstrosity into normal code
+//
+unsigned char *start;
+unsigned char *newEnd;
+int val;
+
+void loop()
+{
+  // Here we've confirmed that loop runs only once; this is totally wrong for Arduino!
+  // Presently Kludge is blocking on the serial input and exits after every statement <enter>
+  //Serial.println("loop started");
+//  if( !Serial.available())
+//  {
+//    delay(100);
+//    return;
+//  }
+//  byte b = Serial.read();
+//  Serial.print('[');
+//  Serial.print(b);
+//  Serial.println(']');
+  delay(10);
+  Kludge();
+  //float a = 6.66;
+  //Serial.println(a);
+  //Serial.println((int)a);
+}
+
+void Hard_Reset(){
+  // Will rework the flow control later
+  PRG_State = PRG_CONSOLE;
+  
   // Always start with memory init
   init_XRAM();
   environment_Reset();
 
-  // LCD init should be handled before console
+  // LCD inits first to show the splash screen
   init_LCD();
   init_Console();
   
@@ -109,20 +150,4 @@ void setup()
 
   // Report memory available
   process_KW_MEM( false);
-}
-
-//
-// Arduino sketch runs in a loop
-// TODO: separate Kludge() monstrosity into normal code
-//
-unsigned char *start;
-unsigned char *newEnd;
-int val;
-
-void loop()
-{
-  // Here we've confirmed that loop runs only once; this is totally wrong for Arduino!
-  Serial.println("loop started");
-  delay(100);
-  Kludge();
 }

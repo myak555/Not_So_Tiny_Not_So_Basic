@@ -355,7 +355,7 @@ static short int parse_Expression7(){
       case FUNC0_TRUE: 
         return 1;
       case FUNC0_PI:
-        return 314;
+        return (int)(program_end-program);
       case FUNC1_PEEK:
       case FUNC1_ABS:
       case FUNC1_AREAD:
@@ -383,6 +383,7 @@ static short int parse_Expression7(){
 //
 static long parse_OneParameterFunction( byte f){
   long a = parse_BracketPair();
+  long res = 0L;
   if( expression_error) return 0L;
   switch( f){
     case FUNC1_PEEK:
@@ -390,22 +391,26 @@ static long parse_OneParameterFunction( byte f){
     case FUNC1_ABS:
       if(a < 0) return -a;
       else return a;
+    case FUNC1_RND:
+      res = (long)random( (int)a );
+      return res;
+    case FUNC1_AREAD:
+      pinMode( (int)a, INPUT );
+      res = (long)analogRead( (int)a );
+      return res;
     case FUNC1_SHOW:
-      unsigned char *address = Program_Line_Find( a);
+      unsigned char *address = Program_Line_Find( a, true);
       if( address>=program_end){
-        byte i = append_Message_PROGMEM( LCD_Message, CONSOLE_LINENOTFOUND_MSG, true);
+        int i = append_Message_PROGMEM( LCD_Message, CONSOLE_LINENOTFOUND_MSG, true, false);
         snprintf( LCD_Message+i, LCD_TEXT_BUFFER_LINE_LENGTH-i, "%03u", a);        
         LCD_PrintString( LCD_Message);
+        LCD_Message[0] = NULLCHAR;
       }
       else{
-        LCD_PrintProgLine( address);        
+        LCD_PrintProgLine( address);
+        Serial.print( "Line address:");       
       }
       return (long)address-(long)program;
-    case FUNC1_AREAD:
-      pinMode( a, INPUT );
-      return (long)analogRead( a );
-    case FUNC1_RND:
-      return (long)random( a );
     }
   return 0L;
 }
@@ -446,7 +451,7 @@ static long parse_TwoParameterFunction( byte f){
           Serial.print( "<00>");
           continue;
         }
-        if( c < ' '){
+        if( c < ' ' || c >= 0x80){
           Serial.write( '<');
           Serial.print( c);
           Serial.write( '>');
@@ -465,7 +470,7 @@ static long parse_TwoParameterFunction( byte f){
 }
 
 //
-// Processes a baracket pair
+// Processes a bracket pair
 //
 static long parse_BracketPair(){
   expression_error = (*txtpos != '(');

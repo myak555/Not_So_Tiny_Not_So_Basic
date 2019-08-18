@@ -6,163 +6,35 @@
 
 //
 // Spaghetti code inherited from TinyBASIC
-// At this point about 30% of monstrosity has been un-kludged
+// At this point about 50% of monstrosity has been un-kludged!
 //
 void Kludge(){
   byte table_index; // used for keyword search
 
-prompt:
-  if( triggerRun ){
-    triggerRun = false;
+  if( PRG_State == PRG_RUNNING ){
+    PRG_State = PRG_CONSOLE;
     current_line = program_start;
     goto execline;
   }
 
+  // Blocking happens here
   getln( '>' );
   toUppercaseBuffer();
 
-  txtpos = program_end+sizeof(unsigned short);
+  // New code for input processing
+  if( check_Line()) return;
 
-  // Find the end of the freshly entered line
-  while(*txtpos != NL)
-    txtpos++;
-
-  // Move it to the end of program_memory
-  {
-    unsigned char *dest;
-    dest = variables_begin-1;
-    while(1)
-    {
-      *dest = *txtpos;
-      if(txtpos == program_end+sizeof(unsigned short))
-        break;
-      dest--;
-      txtpos--;
-    }
-    txtpos = dest;
-  }
-
-  // Now see if we have a line number
-  linenum = testnum();
-  ignore_Blanks();
-  if(linenum == 0)
-    goto direct;
-
-  if(linenum == 0xFFFF){
-    LCD_PrintPROGMEM(CONSOLE_LABEL_MSG);
-    goto prompt;
-  }
-
-  // Find the length of what is left, including the (yet-to-be-populated) line header
-  linelen = 0;
-  while(txtpos[linelen] != NL)
-    linelen++;
-  linelen++; // Include the NL in the line length
-  linelen += sizeof(unsigned short)+sizeof(char); // Add space for the line number and line length
-
-  // Now we have the number, add the line header.
-  txtpos -= 3;
-
-#ifdef ALIGN_MEMORY
-  // Line starts should always be on 16-bit pages
-  if (ALIGN_DOWN(txtpos) != txtpos)
-  {
-    txtpos--;
-    linelen++;
-    // As the start of the line has moved, the data should move as well
-    unsigned char *tomove;
-    tomove = txtpos + 3;
-    while (tomove < txtpos + linelen - 1)
-    {
-      *tomove = *(tomove + 1);
-      tomove++;
-    }
-  }
-#endif
-
-  *((LINE_NUMBER_TYPE *)txtpos) = linenum;
-  txtpos[LINE_LENGTH_OFFSET] = linelen;
-
-  // Merge it into the rest of the program
-  start = Program_Line_Find( linenum);
-
-  // If a line with that number exists, then remove it
-  if(start != program_end && *((LINE_NUMBER_TYPE *)start) == linenum)
-  {
-    unsigned char *dest, *from;
-    unsigned tomove;
-
-    from = start + start[sizeof(LINE_NUMBER_TYPE)];
-    dest = start;
-
-    tomove = program_end - from;
-    while( tomove > 0)
-    {
-      *dest = *from;
-      from++;
-      dest++;
-      tomove--;
-    }  
-    program_end = dest;
-  }
-
-  if(txtpos[LINE_START_OFFSET] == NL) // If the line has no txt, it was just a delete
-    goto prompt;
-
-  // Make room for the new line, either all in one hit or lots of little shuffles
-  while(linelen > 0)
-  { 
-    unsigned int tomove;
-    unsigned char *from,*dest;
-    unsigned int space_to_make;
-
-    space_to_make = txtpos - program_end;
-
-    if(space_to_make > linelen)
-      space_to_make = linelen;
-    newEnd = program_end+space_to_make;
-    tomove = program_end - start;
-
-    // Source and destination - as these areas may overlap we need to move bottom up
-    from = program_end;
-    dest = newEnd;
-    while(tomove > 0)
-    {
-      from--;
-      dest--;
-      *dest = *from;
-      tomove--;
-    }
-
-    // Copy over the bytes into the new space
-    for(tomove = 0; tomove < space_to_make; tomove++)
-    {
-      *start = *txtpos;
-      txtpos++;
-      start++;
-      linelen--;
-    }
-    program_end = newEnd;
-  }
-  goto prompt;
-
-run_next_statement:
-  while(*txtpos == ':') txtpos++;
-  ignore_Blanks();
-  if(*txtpos == NL) goto execnextline;
-  goto interperateAtTxtpos;
-
-direct: 
   txtpos = program_end+sizeof(LINE_NUMBER_TYPE);
-  if(*txtpos == NL)
-    goto prompt;
+  if(*txtpos == NL) return;
 
-interperateAtTxtpos:
+interpretAtTxtpos:
+
+  // this is the second point there break could be administered
   if(check_Console_Break())
   {
     LCD_PrintPROGMEM(CONSOLE_INTERRUPT_MSG);
     program_Reset();
-    goto prompt;
+    return;
   }
 
   table_index = locate_Keyword(KW_Primary);
@@ -170,44 +42,44 @@ interperateAtTxtpos:
   switch(table_index){
   // File keywords
   case KW_FILES:
-    if( process_KW_FILES()) goto prompt;
+    if( process_KW_FILES()) return;
     goto run_next_statement;
   case KW_CHAIN:
   case KW_LOAD:
     process_KW_LOAD( table_index == KW_CHAIN);
-    goto prompt;
+    return;
   case KW_SAVE:
-    if( process_KW_SAVE()) goto prompt;
+    if( process_KW_SAVE()) return;
     goto run_next_statement;
 
   // Memory keywords
   case KW_LIST:
-    if( process_KW_LIST()) goto prompt;
+    if( process_KW_LIST()) return;
     goto run_next_statement;
   case KW_MEM:
     process_KW_MEM(true);
     goto run_next_statement;
   case KW_NEW:
-    if( validate_NLExpression()) goto prompt; 
+    if( validate_NLExpression()) return; 
     program_end = program_start;
-    goto prompt;
+    return;
     
   // Hardware keywords
   case KW_DELAY:
-    if( process_KW_DELAY()) goto prompt;
+    if( process_KW_DELAY()) return;
     goto run_next_statement;
   case KW_AWRITE:
-    if( process_KW_PWRITE( true)) goto prompt;
+    if( process_KW_PWRITE( true)) return;
     goto run_next_statement;
   case KW_DWRITE:
-    if( process_KW_PWRITE( false)) goto prompt;
+    if( process_KW_PWRITE( false)) return;
     goto run_next_statement;
 #ifdef BEEPER_ENABLE
   case KW_TONEW:
-    if( process_KW_TONE( true)) goto prompt;
+    if( process_KW_TONE( true)) return;
     goto run_next_statement;
   case KW_TONE:
-    if( process_KW_TONE( false)) goto prompt;
+    if( process_KW_TONE( false)) return;
     goto run_next_statement;
   case KW_NOTONE:
     noTone( BEEPER_PIN);
@@ -215,23 +87,23 @@ interperateAtTxtpos:
 #endif
 #ifdef EEPROM_ENABLE
   case KW_EFORMAT:
-    if( process_KW_EFORMAT()) goto prompt;
+    if( process_KW_EFORMAT()) return;
     goto run_next_statement;
   case KW_ESAVE:
-    if( process_KW_ESAVE()) goto prompt;
+    if( process_KW_ESAVE()) return;
     goto run_next_statement;
   case KW_ECHAIN:
   case KW_ELOAD:
     process_KW_ELOAD( table_index == KW_ECHAIN);
-    goto prompt;
+    return;
   case KW_ELIST:
-    if( process_KW_ELIST()) goto prompt;
+    if( process_KW_ELIST()) return;
     goto run_next_statement;
 #endif
 
   // Math keywords
   case KW_RSEED:
-    if( process_KW_RSEED()) goto prompt;
+    if( process_KW_RSEED()) return;
     goto run_next_statement;
 
   // Execution keywords
@@ -245,13 +117,13 @@ interperateAtTxtpos:
     val = parse_Expression();
     if(expression_error || *txtpos == NL){
       LCD_PrintPROGMEM(CONSOLE_ARGUMENT_MSG);
-      goto prompt;
+      return;
     }
     if(val != 0)
-      goto interperateAtTxtpos;
+      goto interpretAtTxtpos;
     goto execnextline;
   case KW_GOTO:
-    if( process_KW_GOTO()) goto prompt;
+    if( process_KW_GOTO()) return;
     goto execline;
   case KW_GOSUB:
     goto gosub;
@@ -263,75 +135,89 @@ interperateAtTxtpos:
   case KW_FOR:
     goto forloop; 
   case KW_INPUT:
-    if( process_KW_INPUT()) goto prompt;
+    if( process_KW_INPUT()) return;
     goto run_next_statement;
   case KW_PRINT:
   case KW_QMARK:
-    goto print;
+    switch( process_KW_PRINT()){
+    case 0:
+      goto run_next_statement;
+    case 1:
+      goto execnextline;
+    default:
+      return;      
+    }
   case KW_POKE:
-    if( process_KW_POKE()) goto prompt;
+    if( process_KW_POKE()) return;
     goto run_next_statement;
-  case KW_END:
+  case KW_PAUSE:
   case KW_STOP:
     // This is the easy way to end - set the current line to the end of program attempt to run it
     // need to replace with proper running statement
-    if( validate_NLExpression()) goto prompt;
+    if( validate_NLExpression()) return;
     current_line = program_end;
     goto execline;
-  case KW_BYE:
-    // Leave the basic interperater - this is currently the only way to restart the Arduino loop
+  case KW_RESET:
+    Hard_Reset();
     return;
+  //case KW_LET:
   case KW_DEFAULT:
-    if( process_Assignment()) goto prompt;
+    if( process_Assignment()) return;
     goto run_next_statement;
   default:
     break;
   }
 
+run_next_statement:
+  while(*txtpos == ':') txtpos++;
+  ignore_Blanks();
+  if(*txtpos == NL) goto execnextline;
+  goto interpretAtTxtpos;
+
 execnextline:
-  if(current_line == NULL)    // Processing direct commands?
-    goto prompt;
+  // Processing direct commands?
+  if(current_line == NULL) return;
   current_line = Program_Line_Get_Next( current_line);
 
 execline:
   if(current_line >= program_end){ // Out of lines to run
     program_Reset();
-    goto prompt;
+    return;
   }
   txtpos = Program_Line_Body( current_line);
-  goto interperateAtTxtpos;
+  goto interpretAtTxtpos;
 
 forloop:
   {
     unsigned char var;
     short int initial, Step, terminal;
-    if( validate_CapitalLetterExpression()) goto prompt;
+    if( validate_CapitalLetterExpression()) return;
     var = *txtpos;
     txtpos++;
-    if(validate_CharExpression( '=')) goto prompt;
+    if(validate_CharExpression( '=')) return;
   
     initial = parse_Expression();
-    if( validate_ExpressionError()) goto prompt;
-    if( validate_ScantableExpression(KW_To, 0)) goto prompt;
+    if( validate_ExpressionError()) return;
+    if( validate_ScantableExpression(KW_To, 0)) return;
   
     terminal = parse_Expression();
-    if( validate_ExpressionError()) goto prompt;
+    if( validate_ExpressionError()) return;
   
     table_index = locate_Keyword(KW_Step);
     if(table_index == 0){
       Step = parse_Expression();
-      if( validate_ExpressionError()) goto prompt;
+      if( validate_ExpressionError()) return;
     }
     else Step = 1;
     ignore_Blanks();
-    if( validate_EndStatement()) goto prompt;
+    if( validate_EndStatement()) return;
   
     if(!expression_error && *txtpos == NL){
       struct stack_for_frame *f;
       if(stack_ptr + sizeof(struct stack_for_frame) < stack_limit){
-        LCD_PrintPROGMEM(sorrymsg);
+        LCD_PrintPROGMEM(CONSOLE_STACKERROR_MSG);
         program_Reset();
-        goto prompt;
+        return;
       }
       stack_ptr -= sizeof(struct stack_for_frame);
       f = (struct stack_for_frame *)stack_ptr;
@@ -346,7 +232,7 @@ forloop:
     }
   }
   LCD_PrintPROGMEM(CONSOLE_ARGUMENT_MSG);
-  goto prompt;
+  return;
 
 gosub:
   linenum = parse_Integer( true);
@@ -354,20 +240,20 @@ gosub:
   {
     struct stack_gosub_frame *f;
     if(stack_ptr + sizeof(struct stack_gosub_frame) < stack_limit){
-      LCD_PrintPROGMEM(sorrymsg);
+      LCD_PrintPROGMEM(CONSOLE_STACKERROR_MSG);
       program_Reset();
-      goto prompt;
+      return;
     }
     stack_ptr -= sizeof(struct stack_gosub_frame);
     f = (struct stack_gosub_frame *)stack_ptr;
     f->frame_type = STACK_GOSUB_FLAG;
     f->txtpos = txtpos;
     f->current_line = current_line;
-    current_line = Program_Line_Find( linenum);
+    current_line = Program_Line_Find( linenum, true);
     goto execline;
   }
   LCD_PrintPROGMEM(CONSOLE_LABEL_MSG);
-  goto prompt;
+  return;
 
 next:
   // Fnd the variable name
@@ -375,11 +261,11 @@ next:
   if(*txtpos < 'A' || 'Z' < *txtpos){
     Serial.println("Next");
     LCD_PrintPROGMEM(CONSOLE_ARGUMENT_MSG);
-    goto prompt;
+    return; 
   }
   txtpos++;
   ignore_Blanks();
-  if( validate_EndStatement()) goto prompt;
+  if( validate_EndStatement()) return;
 
 gosub_return:
   // Now walk up the stack frames and find the frame we want, if present
@@ -429,55 +315,10 @@ gosub_return:
     default:
       Serial.println("Stack busted!");
       program_Reset();
-      goto prompt;
+      return; 
     }
   }
   // Didn't find the variable we've been looking for
   LCD_PrintPROGMEM(CONSOLE_ARGUMENT_MSG);
-  goto prompt;
-
-print:
-  // If we have an empty list then just put out a NL
-  if(*txtpos == ':' )
-  {
-    print_NL();
-    txtpos++;
-    goto run_next_statement;
-  }
-  if(*txtpos == NL)
-  {
-    goto execnextline;
-  }
-
-  while(1)
-  {
-    ignore_Blanks();
-    if(print_quoted_string()){;}
-    else if(*txtpos == '"' || *txtpos == '\''){
-      LCD_PrintError(CONSOLE_ARGUMENT_MSG);
-      goto prompt;
-    }
-    else{
-      short int e = parse_Expression();
-      if( validate_ExpressionError()) goto prompt;
-      print_Num(e);
-    }
-
-    // At this point we have three options, a comma or a new line
-    if(*txtpos == ',')
-      txtpos++; // Skip the comma and move onto the next
-    else if(txtpos[0] == ';' && (txtpos[1] == NL || txtpos[1] == ':')){
-      txtpos++; // This has to be the end of the print - no newline
-      break;
-    }
-    else if(*txtpos == NL || *txtpos == ':'){
-      print_NL();  // The end of the print statement
-      break;
-    }
-    else{
-      LCD_PrintError(CONSOLE_SYNTAX_MSG);
-      goto prompt;
-    }
-  }
-  goto run_next_statement;
+  return; 
 }

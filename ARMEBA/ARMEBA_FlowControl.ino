@@ -13,24 +13,8 @@
 //
 
 //
-// Push byte into stack
-//
-static void pushb(byte b){
-  stack_ptr--;
-  *stack_ptr = b;
-}
-
-//
-// Pull byte from stack
-//
-static byte popb(){
-  byte b = *stack_ptr;
-  stack_ptr++;
-  return b;
-}
-
-//
 // Inits envirohnment, sets counters
+// TODO: check memory alignment
 //
 static void environment_Reset(){
   program_start = program;
@@ -56,12 +40,14 @@ static void program_Reset(){
 //
 // tries to find the line by number and returns its location;
 // if cannot find, stops at the program_end
+// exact specifies if the line number must be explicit 
 //
-static unsigned char *Program_Line_Find( LINE_NUMBER_TYPE line_number){
+static unsigned char *Program_Line_Find( LINE_NUMBER_TYPE line_number, bool exact){
   unsigned char *line = program_start;
   while(true){
     if(line >= program_end) return program_end;
-    if(Program_Line_Number( line) == line_number) return line; 
+    if( exact && Program_Line_Number( line) == line_number) return line; 
+    if( !exact && Program_Line_Number( line) >= line_number) return line; 
     line = Program_Line_Get_Next(line);
   }
 }
@@ -82,7 +68,7 @@ inline LINE_NUMBER_TYPE Program_Line_Number( unsigned char * ptr){
 }
 
 //
-// locates line body;
+// return line length as one byte;
 //
 inline byte Program_Line_Length( unsigned char * ptr){
   return ptr[sizeof(LINE_NUMBER_TYPE)];
@@ -112,59 +98,96 @@ inline void Program_Line_Write_Length( unsigned char * ptr, byte n){
   ptr[ sizeof( LINE_NUMBER_TYPE)] = n;
 }
 
-/***************************************************************************/
-static unsigned short testnum(void)
-{
-  unsigned short num = 0;
-  ignore_Blanks();
-
-  while(*txtpos>= '0' && *txtpos <= '9' )
-  {
-    // Trap overflows
-    if(num >= 0xFFFF/10)
-    {
-      num = 0xFFFF;
-      break;
-    }
-
-    num = num *10 + *txtpos - '0';
-    txtpos++;
-  }
-  return  num;
+//
+// Sets the line number and the length of the new line; shifts the line body
+//
+static void compact_NewLine( LINE_NUMBER_TYPE line_number, byte line_length, unsigned char *line_body){
+  Program_Line_Write_Number( program_end, line_number);
+  Program_Line_Write_Length( program_end, line_length);
+  memmove( program_end+LINE_START_OFFSET, line_body, line_length-LINE_START_OFFSET);
+  program_end += line_length;
+  *program_end = NULLCHAR;
 }
 
-/***************************************************************************/
-static unsigned char print_quoted_string(void)
-{
-  int i=0;
-  unsigned char delim = *txtpos;
-  if(delim != '"' && delim != '\'')
-    return 0;
-  txtpos++;
+//
+// the new string is entered at program_end+2
+// this function
+// (a) identifies it as a new program line and if so shifts it to the rign place in memory (returns true) or
+// (b) identifies it as an immediate execution line and leaves in place for further processing (returns false)
+//
+static bool check_Line(){
+  txtpos = program_end+sizeof(LINE_NUMBER_TYPE);
+  ignore_Blanks();
 
-  // Check we have a closing delimiter
-  while(txtpos[i] != delim)
-  {
-    if(txtpos[i] == NL)
-      return 0;
-    i++;
+  // if the line starts with a decimal, it must be a line number
+  LINE_NUMBER_TYPE line_number = (parse_Integer( true) & 0xFFFE);
+  if( expression_error) return false;
+  unsigned char *line_body = txtpos;
+  unsigned char *line_end = txtpos;
+  while( *line_end != NL) line_end++;
+  byte line_length = ALIGN_UP( line_end - line_body + 1 + LINE_START_OFFSET);
+  unsigned char *line_position = Program_Line_Find( line_number, false);
+  
+  // if the location is at the program_end, simply compact it
+  if( line_position >= program_end){
+    compact_NewLine( line_number, line_length, line_body);
+    return true;
   }
 
-  // Print the characters
-  while(*txtpos != delim)
-  {
-    outchar(*txtpos);
-    txtpos++;
+  // if the location is at the existing program line
+  unsigned char *insert_line_position = Program_Line_Find( line_number, true);
+  
+  //non-empty line entered; such line does not exist
+  //TODO: check memory size (variable top)
+  if( insert_line_position >= program_end){
+    compact_NewLine( line_number, line_length, line_body);
+    memmove( line_position+line_length, line_position, program_end - line_position);
+    for(int i=0; i<line_length; i++) line_position[i] = 1;
+    memmove( line_position, program_end, line_length);
+    *program_end = NULLCHAR;
+    return true;
   }
-  txtpos++; // Skip over the last delimiter
 
-  return 1;
+  //empty line entered - remove existing
+  if( line_end-txtpos <= 1){
+    line_position = Program_Line_Get_Next( insert_line_position);
+    int shift_length = program_end - line_position;
+    program_end -= Program_Line_Length( insert_line_position);
+    memmove( insert_line_position, line_position, shift_length);
+    *program_end = NULLCHAR;
+    return true;
+  }
+
+  //non-empty line entered - replace existing
+  line_position = Program_Line_Get_Next( insert_line_position);
+  compact_NewLine( line_number, line_length, line_body);
+  int shift = line_length - Program_Line_Length( insert_line_position); //positive is down
+  if( shift == 0){
+    program_end -= line_length;
+    memmove( insert_line_position, program_end, line_length);
+    *program_end = NULLCHAR;
+    return true;    
+  }
+  if( shift < 0){
+    program_end -= line_length;
+    memmove( insert_line_position, program_end, line_length);
+    memmove( line_position+shift, line_position, program_end-line_position);
+    program_end += shift;
+    *program_end = NULLCHAR;
+    return true;    
+  }
+  memmove( insert_line_position+shift, insert_line_position, program_end-insert_line_position);
+  program_end -= line_length;
+  program_end += shift;
+  memmove( insert_line_position, program_end, line_length);
+  *program_end = NULLCHAR;
+  return true;    
 }
 
 /***************************************************************************/
 static void getln(char prompt)
 {
-  outchar(prompt);
+  Serial.write(prompt);
   txtpos = program_end+sizeof(LINE_NUMBER_TYPE);
 
   while(1)
@@ -175,7 +198,7 @@ static void getln(char prompt)
     case NL:
       //break;
     case CR:
-      print_NL();
+      Serial.println();
       // Terminate all strings with a NL
       txtpos[0] = NL;
       return;
@@ -184,17 +207,17 @@ static void getln(char prompt)
         break;
       txtpos--;
 
-      print_PROGMEM(backspacemsg);
+      // print_PROGMEM(backspacemsg); //Emulating blink. Does not work really 
       break;
     default:
       // We need to leave at least one space to allow us to shuffle the line into order
       if(txtpos == variables_begin-2)
-        outchar(BELL);
+        Serial.write(BELL);
       else
       {
         txtpos[0] = c;
         txtpos++;
-        outchar(c);
+        Serial.write(c);
       }
     }
   }
@@ -228,11 +251,11 @@ void printline()
   list_line += sizeof(LINE_NUMBER_TYPE) + sizeof(char);
 
   // Output the line */
-  print_Unum(line_num);
-  outchar(' ');
+  Serial.print( line_num);
+  Serial.write(' ');
   while(*list_line != NL)
   {
-    outchar(*list_line);
+    Serial.write(*list_line);
     list_line++;
   }
   list_line++;
@@ -241,5 +264,5 @@ void printline()
   if (ALIGN_UP(list_line) != list_line)
     list_line++;
 #endif
-  print_NL();
+  Serial.println();
 }

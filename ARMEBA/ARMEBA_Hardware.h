@@ -155,11 +155,13 @@ static const unsigned char EEPROM_FORMAT_MSG[]          PROGMEM = " EEPROM clear
 #define LCD_STACK_BUFFER_LENGTH 306
 
 static bool LCD_initialized = false;
-char LCD_Text_Buffer[LCD_TEXT_BUFFER_LENGTH]; 
-char *LCD_Line_Pointers[LCD_SCREEN_ROWS];
-char LCD_Stack_Buffer[LCD_STACK_BUFFER_LENGTH]; 
-char *LCD_Stack_Pointers[LCD_STACK_ROWS];
-char LCD_Message[LCD_TEXT_BUFFER_LINE_LENGTH];
+static char LCD_Text_Buffer[LCD_TEXT_BUFFER_LENGTH]; 
+static char *LCD_Line_Pointers[LCD_SCREEN_ROWS];
+static char LCD_Stack_Buffer[LCD_STACK_BUFFER_LENGTH]; 
+static char *LCD_Stack_Pointers[LCD_STACK_ROWS];
+static char LCD_Message[LCD_TEXT_BUFFER_LINE_LENGTH];
+static char LCD_InputLine[LCD_TEXT_BUFFER_LINE_LENGTH];
+static bool LCD_Message_Keep = false;
 
 static const unsigned char STACK_LABEL_X[]           PROGMEM = "X:";
 static const unsigned char STACK_LABEL_Y[]           PROGMEM = "Y:";

@@ -24,7 +24,6 @@ static const unsigned char CONSOLE_UNKNOWN_MSG[]      PROGMEM = " Unknown key:";
 static const unsigned char CONSOLE_LABEL_MSG[]        PROGMEM = " No such line:";
 static const unsigned char CONSOLE_LINENOTFOUND_MSG[] PROGMEM = " Line not found:";
 static const unsigned char CONSOLE_INPUT_MSG[]        PROGMEM =  "? ";
-
-static const unsigned char sorrymsg[]                 PROGMEM = " Recursion too deep. Sorry!";
-static const unsigned char backspacemsg[]             PROGMEM = "\b \b";
+static const unsigned char CONSOLE_STACKERROR_MSG[]   PROGMEM = " Recursion too deep. Sorry!";
+//static const unsigned char backspacemsg1[]            PROGMEM = "\b \b";
 //static const unsigned char unimplimentedmsg[]         PROGMEM = "Unimplemented";
