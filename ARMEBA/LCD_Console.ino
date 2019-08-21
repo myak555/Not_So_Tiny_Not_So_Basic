@@ -20,8 +20,6 @@ void init_Console(){
 static void CONSOLE_PrintPROGMEM( const unsigned char *msg){
   append_Message_PROGMEM( LCD_Message, msg, true, false);
   Serial.println( LCD_Message);
-  *LCD_Message = NULLCHAR;
-  LCD_Message_Keep = false;
 }
 
 //
@@ -97,6 +95,7 @@ static void LCD_PrintPROGMEM( const unsigned char *msg){
   append_Message_PROGMEM( LCD_Line_Pointers[LCD_SCREEN_ROWS-1], msg, true, false);
   LCD_DrawScreen();
   Serial.println( LCD_Line_Pointers[LCD_SCREEN_ROWS-1]);
+  LCD_Output_Keep = false;
 }
 
 //
@@ -179,8 +178,6 @@ static void display_Message_PROGMEM(uint8_t x, uint8_t y, const unsigned char *m
   if( !LCD_initialized) return;
   append_Message_PROGMEM( LCD_Message, msg, true, false);
   u8g2.drawUTF8(x,y,LCD_Message);
-  *LCD_Message = NULLCHAR;
-  LCD_Message_Keep = false;
 }
 
 //
@@ -191,8 +188,7 @@ static void LCD_PrintProgLine( unsigned char *ptr){
   snprintf( LCD_Message, LCD_TEXT_BUFFER_LINE_LENGTH, "%03u ", Program_Line_Number( ptr));
   append_Message_String( LCD_Message, Program_Line_Body( ptr), false, true);
   LCD_PrintString( LCD_Message);
-  *LCD_Message = NULLCHAR;
-  LCD_Message_Keep = false;
+  LCD_Output_Keep = false;
 }
 
 //
@@ -227,8 +223,7 @@ static void LCD_PrintError(const unsigned char *msg){
   *txtpos = tmp;
   append_Message_String( LCD_Message, txtpos, false, true); // and the end of offending line
   LCD_PrintString(LCD_Message);
-  *LCD_Message = NULLCHAR;
-  LCD_Message_Keep = false;
+  LCD_Output_Keep = false;
 }
 
 //
@@ -253,20 +248,20 @@ static void LCD_PrintQuoted(){
   }
   
   // print the characters
-  size_t j = strlen(LCD_Message);
-  size_t k = count_Unicode(LCD_Message);
+  size_t j = strlen(LCD_OutputLine);
+  size_t k = count_Unicode(LCD_OutputLine);
   while(*txtpos != delimiter){
     if( j<LCD_TEXT_BUFFER_LINE_LENGTH-2){
-      LCD_Message[j++] = *txtpos;
-      LCD_Message[j] = NULLCHAR;
+      LCD_OutputLine[j++] = *txtpos;
+      LCD_OutputLine[j] = NULLCHAR;
       if( *txtpos != 208 && *txtpos != 209) k++;
     }
     txtpos++;
     if( k > LCD_SCREEN_COLUMNS-1){
-      LCD_Message[j] = NULLCHAR;
-      LCD_PrintString( LCD_Message);
-      LCD_Message[0] = ' ';
-      LCD_Message[1] = NULLCHAR;
+      LCD_OutputLine[j] = NULLCHAR;
+      LCD_PrintString( LCD_OutputLine);
+      LCD_OutputLine[0] = ' ';
+      LCD_OutputLine[1] = NULLCHAR;
       j = 1;
       k = 1;
     }
@@ -276,16 +271,62 @@ static void LCD_PrintQuoted(){
 }
 
 //
-// prints a numberm such as expression value
+// prints a number such as expression value
 // TODO: change formats
 //
-static void LCD_PrintNumber( long a){
-  size_t j = strlen(LCD_Message);
-  snprintf( LCD_Message+j, LCD_TEXT_BUFFER_LINE_LENGTH-j, "%ld", a);  
-  byte k = count_Unicode(LCD_Message);
+static void LCD_PrintNumber( double value){
+  *LCD_NumberLine = NULLCHAR;
+  LCD_ConvertDouble( value, LCD_NumberLine);
+  append_Message_String( LCD_OutputLine, LCD_NumberLine, false, false);
+  byte k = count_Unicode(LCD_OutputLine);
   if( k > LCD_SCREEN_COLUMNS-1){
-    LCD_PrintString( LCD_Message);
-    LCD_Message[0] = ' ';
-    LCD_Message[1] = NULLCHAR;
+    LCD_PrintString( LCD_OutputLine);
+    append_Message_PROGMEM( LCD_OutputLine, SD_INDENT_MSG, true, false);
   }
+}
+
+//
+// Converts double properly
+// Note that the buffer length must be sufficient to acommodate at least 
+// the sign, 9 characters of the number, 6 characters of the exponent and zero
+// That is 17 characters
+//
+static char *LCD_ConvertDouble( double n, char *buff){
+  int i;
+  if( n<0.0){
+    *buff++ = '-';
+    n=-n;
+  }
+  *buff = NULLCHAR;
+  if( n < 1e-30){
+    append_Message_PROGMEM( buff, CONSOLE_ZERO_MSG, false, false);
+    return buff;
+  }
+
+  // scientific format
+  if( n>9999999.0 || n<1.0){
+    int exponent = 0;
+    while( n>10.0){
+      n *= 0.1;
+      exponent++;
+    }
+    while( n<1.0){
+      n *= 10;
+      exponent--;
+    }
+    dtostrf( n, LCD_decimal_places+2, LCD_decimal_places, buff);
+    i = strlen( buff);
+    snprintf( buff+i, LCD_TEXT_BUFFER_LINE_LENGTH-i, "e%+03d", exponent);
+    return buff;
+  }
+
+  // normal decimal format
+  dtostrf( n, LCD_decimal_places+2, LCD_decimal_places, buff);
+
+  // check if the trailing zeros can be discarded
+  i = strlen(buff)-1;
+  while( i>0 && buff[i] == '0') i--;
+  if( buff[i] == '.') i--;
+  buff[i+1] = NULLCHAR;
+  return buff;
 }

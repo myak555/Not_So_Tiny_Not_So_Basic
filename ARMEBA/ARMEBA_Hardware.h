@@ -160,8 +160,9 @@ static char *LCD_Line_Pointers[LCD_SCREEN_ROWS];
 static char LCD_Stack_Buffer[LCD_STACK_BUFFER_LENGTH]; 
 static char *LCD_Stack_Pointers[LCD_STACK_ROWS];
 static char LCD_Message[LCD_TEXT_BUFFER_LINE_LENGTH];
-static char LCD_InputLine[LCD_TEXT_BUFFER_LINE_LENGTH];
-static bool LCD_Message_Keep = false;
+static char LCD_NumberLine[LCD_TEXT_BUFFER_LINE_LENGTH];
+static char LCD_OutputLine[LCD_TEXT_BUFFER_LINE_LENGTH];
+static bool LCD_Output_Keep = false; // used in print
 
 static const unsigned char STACK_LABEL_X[]           PROGMEM = "X:";
 static const unsigned char STACK_LABEL_Y[]           PROGMEM = "Y:";

@@ -18,7 +18,7 @@ static bool process_KW_RSEED(){
 // POKE address, value - sets character to the address
 //
 static bool process_KW_POKE(){
-  long a = (unsigned char *)parse_Expression();
+  long a = (long)parse_Expression();
   if( validate_ExpressionError()) return true;
   if( validate_CharExpression( ',')) return true;
   byte value = (byte)parse_Expression();
@@ -53,20 +53,7 @@ static bool process_KW_LIST(){
     if( line_number >= a) LCD_PrintProgLine( ptr);
     ptr = Program_Line_Get_Next( ptr);
   }
-  *LCD_Message = NULLCHAR;
-  LCD_Message_Keep = false;
-  return false;
-}
-
-//
-// GOTO line_number - universally hated, but so far necessary
-//
-static bool process_KW_GOTO(){
-  linenum = parse_Integer( true);
-  if(validate_LabelExpression()) return true;
-  unsigned char *previous_line = current_line;
-  current_line = Program_Line_Find( linenum, true);
-  if(validate_LineExists(current_line)) return true;
+  LCD_Output_Keep = false;
   return false;
 }
 
@@ -74,8 +61,8 @@ static bool process_KW_GOTO(){
 // INPUT variable[,question] - inputs an expression into a variable
 //
 static bool process_KW_INPUT(){
-  if( validate_CapitalLetterExpression()) return true;
-  unsigned char var = *txtpos++;
+  if( validate_LetterExpression()) return true;
+  unsigned char var_name = *txtpos++;
   ignore_Blanks();
   if( *txtpos == ','){
     txtpos++;
@@ -84,40 +71,41 @@ static bool process_KW_INPUT(){
   }
   else{
     if( validate_EndStatement()) return true;
-    LCD_Message[0] = var;
+    LCD_Message[0] = var_name;
     LCD_Message[1] = NULLCHAR;
     append_Message_PROGMEM( LCD_Message, CONSOLE_INPUT_MSG, false, false);    
   }
-  long value = 0L;
+  double value = 0.0;
   unsigned char *tmp = txtpos;
   do{
     LCD_PrintString( LCD_Message);
     getln( ' ' );
-    toUppercaseBuffer();
+    //toUppercaseBuffer();
     txtpos = program_end+sizeof(LINE_NUMBER_TYPE);
     ignore_Blanks();
     value = parse_Expression();
     if( expression_error) LCD_PrintPROGMEM( CONSOLE_ARGUMENT_MSG);
     } while(expression_error);
-  ((short int *)variables_begin)[var-'A'] = value;
+  Set_Variable( var_name, value);
   txtpos = tmp;
+  LCD_Output_Keep = false;
   return false;
 }
 
 //
-// PRINT statement[,statement][;statement][:] - tricky function fop printing stuff
-// exit could be to the next statement (0), to execution of the next line (1) or to a prompt (2)
+// PRINT statement[,statement][;statement][:] - tricky function for printing stuff
+// exit could be to the next statement (0), to execution of the next line (1) or to the prompt (2)
 //
 static byte process_KW_PRINT(){
-  long a = 0L;
-  if( LCD_Message_Keep) LCD_Message_Keep = false; 
-  else LCD_Message[0] = NULLCHAR;
+  double value = 0.0;
+  if( LCD_Output_Keep) LCD_Output_Keep = false; 
+  else *LCD_OutputLine = NULLCHAR;
   
   // an empty list - causes console scroll
   if(*txtpos == ':' ){
-    LCD_PrintString( LCD_Message);
-    *LCD_Message = NULLCHAR;
-    LCD_Message_Keep = false;
+    LCD_PrintString( LCD_OutputLine);
+    *LCD_OutputLine = NULLCHAR;
+    LCD_Output_Keep = false;
     txtpos++;
     return 0;
   }
@@ -130,9 +118,9 @@ static byte process_KW_PRINT(){
       if( validate_ExpressionError()) return 2;
     }
     else{
-      long a = parse_Expression();
+      value = parse_Expression();
       if( validate_ExpressionError()) return 2;
-      LCD_PrintNumber( a);
+      LCD_PrintNumber( value);
     }
 
     // comma - continue printing in the same line
@@ -144,16 +132,15 @@ static byte process_KW_PRINT(){
     // semicolon before the end of line or colon - end the print, hold the same line
     if( *txtpos == ';' && (txtpos[1] == NL || txtpos[1] == ':')){
       txtpos++;
-      LCD_Message_Keep = true;
+      LCD_Output_Keep = true;
       return 0;
     }
 
     // new line or new statement with no semicolon
     if( *txtpos == NL || *txtpos == ':'){
-      LCD_PrintString( LCD_Message);
+      LCD_PrintString( LCD_OutputLine);
       return 0;
-    }
-    
+    }    
     LCD_PrintError(CONSOLE_SYNTAX_MSG);
     return 2;
   }
@@ -164,17 +151,17 @@ static byte process_KW_PRINT(){
 // Assignment variable = expression - LET keyword is dropped
 //
 static bool process_Assignment(){
-  if( validate_CapitalLetterExpression()) return true;
+  if( validate_LetterExpression()) return true;
   if( isAlpha( txtpos[1])){
     while(  isAlphaNumeric( *txtpos)) txtpos++;
     LCD_PrintError(CONSOLE_UNKNOWN_MSG);
     return true;      
   }
-  short int *var = (short int *)variables_begin + *txtpos++ - 'A';
+  byte var_name = *txtpos++;
   if( validate_CharExpression( '=')) return true;
-  long value = parse_Expression();
+  double value = parse_Expression();
   if( validate_ExpressionError()) return true;
   if( validate_EndStatement()) return true;
-  *var = value;
+  Set_Variable( var_name, value);
   return false;
 }

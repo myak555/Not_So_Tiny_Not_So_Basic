@@ -159,7 +159,7 @@ static unsigned char * program_LoadLine( unsigned char *ptr, File f0){
     }
     ptr[l] = NULLCHAR;
     txtpos = ptr;
-    Program_Line_Write_Number( ptr, parse_Integer( true) & 0xFFFE);
+    Program_Line_Write_Number( ptr, parse_Integer( true) & 0xFFFF);
     l = LINE_START_OFFSET; // leave space for line length
     break; 
   }
@@ -361,7 +361,7 @@ static bool process_KW_ELOAD( bool chain){
     program_end[pos] = c;
     if( !ln_Found && !isDigit( program_end[pos])){
       txtpos = program_end; 
-      LINE_NUMBER_TYPE line_number = parse_Integer( true) & 0xFFFE;
+      LINE_NUMBER_TYPE line_number = parse_Integer( true) & 0xFFFF;
       if( expression_error) return true;
       ln_Found = true;
       Program_Line_Write_Number( program_end, line_number);
