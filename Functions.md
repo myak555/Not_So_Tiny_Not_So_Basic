@@ -38,7 +38,7 @@
 - ? expression					- *same as PRINT*
 - REM stuff						- *comments*
 - ' stuff						- *comments*
-- # stuff						- *comments*
+- \# stuff						- *comments*
 
 ## Numbers entry:
 - 123456						- *integer number (4-byte)*
