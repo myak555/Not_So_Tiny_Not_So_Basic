@@ -76,7 +76,7 @@
 - FACT( expression )			- *returns the factorial*
 - LOG(expression1, expression2)	- *returns the logarithm of expression2 base expression1*
 - POW(expression1, expression2)	- *other way to write a^b*
-- RADIUS(exp1, exp2)			- *shorthand for SQRT(a*a+b*b)*
+- RADIUS(exp1, exp2)			- *shorthand for SQRT(a\*a+b\*b)*
 - Cnk(exp1, exp2)				- *permutations of k from n (note capitalization)*
 - RSEED v						- *sets the random seed to v*
 - RANDOM( m ) 					- *returns a random number from 0 to m*
