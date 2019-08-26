@@ -4,7 +4,9 @@
 //
 /////////////////////////////////////////////////////
 
+//
 // ASCII Characters
+//
 #define NULLCHAR  '\0'
 #define CR        '\r'
 #define NL        '\n'
@@ -20,6 +22,35 @@
 #define CTRLX     0x18
 
 //
+// This implements communication via a standard serial port
+//
+
+// Valid: 9600, 19200, 38400, 115200, etc
+#define CONSOLE_BAUD 115200
+
+static const unsigned char ARMEBA_INITIAL_MSG[]       PROGMEM = "ARMEBA IS NOT BASIC";
+static const unsigned char ARMEBA_VERSION_MSG[]       PROGMEM = "version " ARMEBA_VERSION;
+
+static const unsigned char ARMEBA_COLUMN_MSG[]        PROGMEM = "12345678901234567890123456789012345";
+static const unsigned char ARMEBA_COLUMN_MSG2[]       PROGMEM = "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII";
+
+static const unsigned char CONSOLE_INTERRUPT_MSG[]    PROGMEM = " <HALT>";
+static const unsigned char CONSOLE_SYNTAX_MSG[]       PROGMEM = " Syntax error";
+static const unsigned char CONSOLE_ARGUMENT_MSG[]     PROGMEM = " Argument error";
+static const unsigned char CONSOLE_UNKNOWN_MSG[]      PROGMEM = " Unknown key";
+static const unsigned char CONSOLE_LABEL_MSG[]        PROGMEM = " No such line";
+static const unsigned char CONSOLE_LINENOTFOUND_MSG[] PROGMEM = " Line not found";
+static const unsigned char CONSOLE_RETURN_MSG[]       PROGMEM = " No line to return";
+static const unsigned char CONSOLE_INPUT_MSG[]        PROGMEM =  "? ";
+static const unsigned char CONSOLE_STACKERROR_MSG[]   PROGMEM = " Recursion too deep";
+static const unsigned char CONSOLE_NOSUCHMODE_MSG[]   PROGMEM = " Impossible mode";
+static const unsigned char CONSOLE_UNDEFTRIG_MSG[]    PROGMEM = " Undefined trig argument";
+
+static const unsigned char CONSOLE_ZERO_MSG[]         PROGMEM = "0";
+
+//static const unsigned char unimplimentedmsg[]         PROGMEM = "Unimplemented";
+
+//
 // Primary keyword table
 // Each token ends with 0x80 added to it
 //
@@ -32,6 +63,8 @@ const static unsigned char KW_Primary[] PROGMEM = {
   'n','e','w'+0x80,
   'R','U','N'+0x80,
   'r','u','n'+0x80,
+  'S','T','E','P'+0x80,
+  's','t','e','p'+0x80,
   'S','A','V','E'+0x80,
   's','a','v','e'+0x80,
   'N','E','X','T'+0x80,
@@ -44,6 +77,8 @@ const static unsigned char KW_Primary[] PROGMEM = {
   'g','o','s','u','b'+0x80,
   'R','E','T','U','R','N'+0x80,
   'r','e','t','u','r','n'+0x80,
+  'C','O','N','T','I','N','U','E'+0x80,
+  'c','o','n','t','i','n','u','e'+0x80,
   'R','E','M'+0x80,
   'r','e','m'+0x80,
   'F','O','R'+0x80,
@@ -62,6 +97,8 @@ const static unsigned char KW_Primary[] PROGMEM = {
   'f','i','l','e','s'+0x80,
   'M','E','M'+0x80,
   'm','e','m'+0x80,
+  'S','E','T'+0x80,
+  's','e','t'+0x80,
   '?'+ 0x80,
   '\''+ 0x80,'#'+ 0x80,
   'A','W','R','I','T','E'+0x80,
@@ -108,12 +145,14 @@ enum {
   KW_LOAD, KW_load,
   KW_NEW, KW_new,
   KW_RUN, KW_run,
+  KW_STEP, KW_step,
   KW_SAVE, KW_save,
   KW_NEXT, KW_next,
   KW_IF, KW_if,
   KW_GOTO, KW_goto,
   KW_GOSUB, KW_gosub,
   KW_RETURN, KW_return,
+  KW_CONTINUE, KW_continue,
   KW_REM, KW_rem,
   KW_FOR, KW_for,
   KW_INPUT, KW_input,
@@ -123,6 +162,7 @@ enum {
   KW_RESET, KW_reset,
   KW_FILES, KW_files,
   KW_MEM, KW_mem,
+  KW_SET, KW_set,
   KW_QMARK,
   KW_QUOTE, KW_HASH,
   KW_AWRITE,KW_awrite,
@@ -154,18 +194,32 @@ enum {
 const static unsigned char KW_Functions[] PROGMEM = {
   'L','O','W'+0x80,
   'l','o','w'+0x80,
+  'L','O','G'+0x80,
+  'l','o','g'+0x80,
   'L','O'+0x80,
   'l','o'+0x80,
   'F','A','L','S','E'+0x80,
   'f','a','l','s','e'+0x80,
+  'R','A','D','I','A','N'+0x80,
+  'r','a','d','i','a','n'+0x80,
   'H','I','G','H'+0x80,
   'h','i','g','h'+0x80,
   'H','I'+0x80,
   'h','i'+0x80,
   'T','R','U','E'+0x80,
   't','r','u','e'+0x80,
+  'D','E','G','R','E','E','S'+0x80,
+  'd','e','g','r','e','e','s'+0x80,
+  'E','E'+0x80,
+  'e','e'+0x80,
+  'G','R','A','D','I','A','N'+0x80,
+  'g','r','a','d','i','a','n'+0x80,
   'P','I'+0x80,
   'p','i'+0x80,
+  'P','L','I','N','E'+0x80,
+  'p','l','i','n','e'+0x80,
+  'T','M','O','D','E'+0x80,
+  't','m','o','d','e'+0x80,
   'P','E','E','K'+0x80,
   'p','e','e','k'+0x80,
   'A','B','S'+0x80,
@@ -178,14 +232,35 @@ const static unsigned char KW_Functions[] PROGMEM = {
   's','h','o','w'+0x80,
   'S','I','N'+0x80,
   's','i','n'+0x80,
+  'A','S','I','N'+0x80,
+  'a','s','i','n'+0x80,
   'C','O','S'+0x80,
   'c','o','s'+0x80,
+  'A','C','O','S'+0x80,
+  'a','c','o','s'+0x80,
+  'T','A','N'+0x80,
+  't','a','n'+0x80,
+  'A','T','A','N'+0x80,
+  'a','t','a','n'+0x80,
+  'S','Q','R','T'+0x80,
+  's','q','r','t'+0x80,
+  'L','N'+0x80,
+  'l','n'+0x80,
+  'E','X','P'+0x80,
+  'e','x','p'+0x80,
+  'L','G'+0x80,
+  'l','g'+0x80,
+  'F','A','C','T'+0x80,
+  'f','a','c','t'+0x80,
   'D','R','E','A','D'+0x80,
   'd','r','e','a','d'+0x80,
   'D','U','M','P'+0x80,
   'd','u','m','p'+0x80,
   'P','O','W'+0x80,
   'p','o','w'+0x80,
+  'R','A','D','I','U','S'+0x80,
+  'r','a','d','i','u','s'+0x80,
+  'C','n','k'+0x80,
   0
 };
 
@@ -194,19 +269,36 @@ const static unsigned char KW_Functions[] PROGMEM = {
 // e.g. FUNC1_ABS takes one parameter: ABS(-10)
 //
 enum {
-  FUNC0_LOW = 0, FUNC0_low, FUNC0_LO, FUNC0_lo, FUNC0_FALSE, FUNC0_false,
-  FUNC0_HIGH, FUNC0_high, FUNC0_HI, FUNC0_hi, FUNC0_TRUE, FUNC0_true, 
+  FUNC0_LOW = 0, FUNC0_low,
+  FUNC2_LOG, FUNC2_log, 
+  FUNC0_LO, FUNC0_lo, FUNC0_FALSE, FUNC0_false, FUNC0_RADIAN, FUNC0_radian,
+  FUNC0_HIGH, FUNC0_high, FUNC0_HI, FUNC0_hi, FUNC0_TRUE, FUNC0_true, FUNC0_DEGREES, FUNC0_degrees,
+  FUNC0_E, FUNC0_e,
+  FUNC0_GRADIAN, FUNC0_gradian,
   FUNC0_PI, FUNC0_pi,
+  FUNC0_PLINE, FUNC0_pline,
+  FUNC0_TMODE, FUNC0_tmode,
   FUNC1_PEEK, FUNC1_peek,
   FUNC1_ABS, FUNC1_abs,
   FUNC1_AREAD, FUNC1_aread,
   FUNC1_RANDOM, FUNC1_random,
   FUNC1_SHOW, FUNC1_show,
   FUNC1_SIN, FUNC1_sin,
+  FUNC1_ASIN, FUNC1_asin,
   FUNC1_COS, FUNC1_cos,
+  FUNC1_ACOS, FUNC1_acos,
+  FUNC1_TAN, FUNC1_tan,
+  FUNC1_ATAN, FUNC1_atan,
+  FUNC1_SQRT, FUNC1_sqrt,
+  FUNC1_LN, FUNC1_ln,
+  FUNC1_EXP, FUNC1_exp,
+  FUNC1_LG, FUNC1_lg,
+  FUNC1_FACT, FUNC1_fact,
   FUNC2_DREAD, FUNC2_dread,
   FUNC2_DUMP, FUNC2_dump,
   FUNC2_POW, FUNC2_pow,
+  FUNC2_RADIUS, FUNC2_radius,
+  FUNC2_Cnk,  
   FUNCTION_UNKNOWN /* always the final one*/
 };
 

@@ -34,6 +34,17 @@ static void ignore_Blanks(){
 }
 
 //
+// Skips to the end of statement
+// returns true if NL is reached
+//
+static bool ignore_Statement(){
+  while(*txtpos == ':') txtpos++;
+  ignore_Blanks();
+  if(*txtpos == NL) return true;
+  return false;
+}
+
+//
 // Checks if the value at text position is new line
 //
 static bool validate_LabelExpression(){
@@ -82,6 +93,16 @@ static bool validate_LetterExpression(){
   ignore_Blanks();
   if ( isAlpha(txtpos[0])) return false; 
   LCD_PrintError(CONSOLE_ARGUMENT_MSG);
+  return true;
+}
+
+//
+// Checks if the value at text position is a capital letter (variable)
+//
+static bool validate_TrigArgument( double a){
+  if( a < -1e7 < a && a < 1e7) return false;
+  LCD_PrintError(CONSOLE_UNDEFTRIG_MSG);
+  expression_error = true;
   return true;
 }
 
@@ -213,10 +234,10 @@ static double parse_Expression3(){
       if(a == b) return 1.0;
       break;
     case COMPARE_SG:
-      if(a-b > 1e6) return 1.0;
+      if(a>0.0 && b>0.0 && a>b*1000.0) return 1.0;
       break;
     case COMPARE_SL:
-      if(a-b < -1e6) return 1.0;
+      if(a>0.0 && b>0.0 && a*1000.0<b) return 1.0;
       break;      
     default:
       break;
@@ -353,41 +374,81 @@ static double parse_Expression7(){
       case FUNC0_LOW:
       case FUNC0_LO:
       case FUNC0_FALSE:
+      case FUNC0_RADIAN:
       case FUNC0_low:
       case FUNC0_lo:
       case FUNC0_false:
-        return 0;
+      case FUNC0_radian:
+        return 0.0;
       case FUNC0_HIGH:
       case FUNC0_HI:
       case FUNC0_TRUE: 
+      case FUNC0_DEGREES: 
       case FUNC0_high:
       case FUNC0_hi:
       case FUNC0_true: 
-        return 1;
+      case FUNC0_degrees: 
+        return 1.0;
+      case FUNC0_GRADIAN:
+      case FUNC0_gradian:
+        return 2.0;
+      case FUNC0_E:
+      case FUNC0_e:
+        return 2.7182818;
       case FUNC0_PI:
       case FUNC0_pi:
         return 3.1415926;
+      case FUNC0_PLINE:
+      case FUNC0_pline:
+        if( current_line >= program_end) return -1.0;
+        else return (double) Program_Line_Number( current_line);
+      case FUNC0_TMODE:
+      case FUNC0_tmode:
+        return (double)TMODE_State;
       case FUNC1_PEEK:
       case FUNC1_ABS:
       case FUNC1_AREAD:
       case FUNC1_RANDOM:
       case FUNC1_SHOW:
       case FUNC1_SIN:
+      case FUNC1_ASIN:
       case FUNC1_COS:
+      case FUNC1_ACOS:
+      case FUNC1_TAN:
+      case FUNC1_ATAN:
+      case FUNC1_SQRT:
+      case FUNC1_LN:
+      case FUNC1_EXP:
+      case FUNC1_LG:
+      case FUNC1_FACT:
       case FUNC1_peek:
       case FUNC1_abs:
       case FUNC1_aread:
       case FUNC1_random:
       case FUNC1_show:
       case FUNC1_sin:
+      case FUNC1_asin:
       case FUNC1_cos:
+      case FUNC1_acos:
+      case FUNC1_tan:
+      case FUNC1_atan:
+      case FUNC1_sqrt:
+      case FUNC1_ln:
+      case FUNC1_exp:
+      case FUNC1_lg:
+      case FUNC1_fact:
         return parse_OneParameterFunction(f);
       case FUNC2_DREAD:
       case FUNC2_DUMP:
+      case FUNC2_LOG:
       case FUNC2_POW:
+      case FUNC2_RADIUS:
       case FUNC2_dread:
       case FUNC2_dump:
+      case FUNC2_log:
       case FUNC2_pow:
+      case FUNC2_radius:
+      case FUNC2_Cnk:
         return parse_TwoParameterFunction(f);
       default:
         expression_error = (f == FUNCTION_UNKNOWN);
@@ -406,36 +467,30 @@ static double parse_Expression7(){
 //
 static double parse_OneParameterFunction( byte f){
   double a = parse_BracketPair();
+  if( expression_error) return 0.0;
   double res = 0.0;
   LINE_NUMBER_TYPE ln = (LINE_NUMBER_TYPE)a;
   unsigned char *address;
   int i;
-  if( expression_error) return 0.0;
   switch( f){
-    case FUNC1_SIN:
-    case FUNC1_sin:
-      res = sin(a);
-      return res;
-    case FUNC1_COS:
-    case FUNC1_cos:
-      res = cos(a);
-      return res;
     case FUNC1_PEEK:
     case FUNC1_peek:
-      return (double)(program[(long)a]);
+      res = (double)(program[(long)a]);
+      break;
     case FUNC1_ABS:
     case FUNC1_abs:
-      if(a < 0) return -a;
-      else return a;
+      if(a < 0) res = -a;
+      else res = a;
+      break;
     case FUNC1_RANDOM:
     case FUNC1_random:
       res = (double)random( (long)a );
-      return res;
+      break;
     case FUNC1_AREAD:
     case FUNC1_aread:
       pinMode( (int)a, INPUT );
       res = (double)analogRead( ln );
-      return res;
+      break;
     case FUNC1_SHOW:
     case FUNC1_show:
       address = Program_Line_Find( ln, true);
@@ -449,11 +504,57 @@ static double parse_OneParameterFunction( byte f){
         LCD_PrintProgLine( address);
         Serial.print( "Line address: ");       
       }
-      return (double)((long)address-(long)program);
+      res = (double)((long)address-(long)program);
+      break;
+    case FUNC1_SIN:
+    case FUNC1_sin:
+      res = compute_SIN(a);
+      break;
+    case FUNC1_ASIN:
+    case FUNC1_asin:
+      res = compute_ASIN(a);
+      break;
+    case FUNC1_COS:
+    case FUNC1_cos:
+      res = compute_COS(a);
+      break;
+    case FUNC1_ACOS:
+    case FUNC1_acos:
+      res = compute_ACOS(a);
+      break;
+    case FUNC1_TAN:
+    case FUNC1_tan:
+      res = compute_TAN(a);
+      break;
+    case FUNC1_ATAN:
+    case FUNC1_atan:
+      res = compute_TAN(a);
+      break;
+    case FUNC1_SQRT:
+    case FUNC1_sqrt:
+      res = compute_SQRT(a);
+      break;
+    case FUNC1_LN:
+    case FUNC1_ln:
+      res = compute_LN(a);
+      break;
+    case FUNC1_EXP:
+    case FUNC1_exp:
+      res = compute_EXP(a);
+      break;
+    case FUNC1_LG:
+    case FUNC1_lg:
+      res = compute_LG(a);
+      break;
+    case FUNC1_FACT:
+    case FUNC1_fact:
+      res = compute_FACT(a);
+      break;      
     default:
+      expression_error = true;
       break;
     }
-  return -999.25;
+  return res;
 }
     
 //
@@ -511,10 +612,18 @@ static double parse_TwoParameterFunction( byte f){
       Serial.println();
       Serial.print("End dump: ");
       return a+b;
-    }
+    }    
+    case FUNC2_LOG:
+    case FUNC2_log:
+      return compute_LOG(a, b);
     case FUNC2_POW:
     case FUNC2_pow:
       return compute_POW(a, b);
+    case FUNC2_RADIUS:
+    case FUNC2_radius:
+      return compute_RADIUS(a, b);
+    case FUNC2_Cnk:
+      return compute_Cnk(a, b);
     default:
       break;
     }
@@ -724,7 +833,7 @@ static void parse_String( unsigned char *dest){
     }
     if( pos < LCD_TEXT_BUFFER_LINE_LENGTH-1) dest[pos++] = c;
   }
-  LCD_Message[pos] = NULLCHAR;
+  dest[pos] = NULLCHAR;
 }
 
 //

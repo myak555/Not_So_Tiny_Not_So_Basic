@@ -23,7 +23,6 @@
 #include <math.h>
 #include "ARMEBA_Hardware.h"
 #include "Keywords.h"
-#include "MEGA_Console.h"
 
 // controls autorun settings
 enum {
@@ -32,6 +31,14 @@ enum {
   PRG_RUNNING
 };
 static byte PRG_State = PRG_CONSOLE;
+
+// controls degree/radian/grad settings
+enum {
+  TMODE_RADIAN = 0,
+  TMODE_DEGREES,
+  TMODE_GRADIAN
+};
+static byte TMODE_State = TMODE_RADIAN;
 
 struct stack_Frame_FOR {
   char ftype;
@@ -89,9 +96,10 @@ static volatile unsigned char *stack;
 static volatile unsigned char *stack_ptr;
 static volatile unsigned char *variables_begin;
 static volatile unsigned char *stack_limit;
-static unsigned char *txtpos, *list_line, *tmptxtpos;
+static unsigned char *txtpos; // used in parsing
+static unsigned char *input_entry_location;
+size_t input_position;
 static bool expression_error;
-static unsigned char *tempsp;
 
 #define STACK_GOSUB_FLAG 'G'
 #define STACK_FOR_FLAG 'F'
@@ -121,99 +129,53 @@ int LCD_decimal_places = 6;
 // stack_ptr - stack grows up ^
 //
 
-int pos=0;
-
+//
+// Hardware reset upon power-up
+// Note SD card resets only once
+//
 void setup()
 {
   Hard_Reset();
-//  float f = 3.1415926;
-//  f *= 2;
-//  Serial.print( "tan(pi) = ");
-//  Serial.println( tan(f));
-//  Serial.print( "sq(pi) = ");
-//  Serial.println( sq(f));
-//  Serial.print( "sqrt(pi) = ");
-//  Serial.println( sqrt(f));
-//  Serial.print( "exp(pi) = ");
-//  Serial.println( exp(f));
-//  Serial.print( "log(pi) = ");
-//  Serial.println( log(f));
-//  Serial.print( "log10(pi) = ");
-//  Serial.println( log10(f));
-//  dtostrf(f, 8, 3, buff);
-//  Serial.print( "snprintf f = ");
-//  Serial.println( buff);
-//  dtostrf(f, 8, 3, buff);
-//  Serial.print( "snprintf e = ");
-//  Serial.println( buff);
 }
 
 //
-// Arduino sketch runs in a loop
-// TODO: separate Kludge() monstrosity into normal code
+// Arduino sketch runs in a loop, periodically yielding to the system
 //
-unsigned char *start;
-unsigned char *newEnd;
-int val;
-
 void loop()
 {
-  // Here we've confirmed that loop runs only once; this is totally wrong for Arduino!
-  // Presently Kludge is blocking on the serial input and exits after every statement <enter>
-
-  // Test code for expressions:
-//  if( !Serial.available()){
-//    delay( 100);
-//    return;
-//  }
-//  char c = Serial.read();
-//  if( c!=10 && pos < 30){
-//    LCD_Message[pos++] = c;
-//    return;    
-//  }
-//  LCD_Message[pos] = NULLCHAR;
-//  txtpos = LCD_Message;
-//  double d = parse_Expression();
-//  pos = append_Message_String( LCD_Message, " = ", false, false);
-//  LCD_ConvertDouble( d, LCD_Message+pos);
-//  LCD_PrintString( LCD_Message);
-//  if( expression_error) Serial.println( "Error set");
-//  pos = 0;
-
-  // Main Kludge
-  delay(10);
-  Kludge();
+  // The user input is handled here.
+  // If the program is running, just check for the stop/pause condition
+  // Otherwise collect the user input into the buffer
+  switch(PRG_State){
+    case PRG_CONSOLE:
+      if( continue_New_Entry()) break;
+      append_Message_String( LCD_Message, input_entry_location, true, true);
+      LCD_PrintString( LCD_Message);
+      if( !check_Line()) process_One_Line( input_entry_location, false);
+      else current_line = program_start; // out of pause condition
+      start_New_Entry( false);
+      break;
+    case PRG_RPN:
+      // not implemented
+      break;
+    case PRG_RUNNING:
+      if( !check_Stop_Condition() && !process_One_Line( current_line, true)) return;
+      PRG_State = PRG_CONSOLE;
+      start_New_Entry( false);
+      break;
+    default:
+      break;
+  }
+  
+  // yield to microprocessor if not running and no user input
+  if(!PRG_RUNNING) delay(10);
+  return; 
 }
 
-void Hard_Reset(){
-  // Will rework the flow control later
-  PRG_State = PRG_CONSOLE;
-  
-  // Always start with memory init
-  init_XRAM();
-  environment_Reset();
-
-  // LCD inits first to show the splash screen
-  init_LCD();
-  init_Console();
-  
-  // Other hardware inits in no particular order
-  #ifdef EEPROM_ENABLE
-  init_EEPROM();
-  #endif /* EEPROM_ENABLE */
-  init_SD();
-  #ifdef BEEPER_ENABLE
-  noTone( BEEPER_PIN);
-  #endif
-
-  // Dog-and-pony show for testing functionality under development
-  delay(1000);
-  display_StackScreen();
-  delay(1000);
-  //  display_EditScreen();
-  //  delay(2000);
-  //  display_TerminalScreen();
-
-  // Report memory available
-  process_KW_MEM( false);
+//
+// Checks if the dedicated stop or pause hardware buttons are pressed;
+// return true if so
+//
+static bool check_Stop_Condition(){
+  return false; // for now, no such buttons on the test machine
 }

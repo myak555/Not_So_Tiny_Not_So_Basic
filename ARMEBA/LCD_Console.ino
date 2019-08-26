@@ -23,6 +23,20 @@ static void CONSOLE_PrintPROGMEM( const unsigned char *msg){
 }
 
 //
+// Converts to upper case (not actually needed)
+//
+//static void convert_toUppercase( byte * dest){
+//  byte quote = NULLCHAR;
+//  byte delta = 'A' - 'a';
+//  while(*dest != NL && *dest != NULLCHAR){
+//    if(*dest == quote) quote = NULLCHAR;
+//    else if(*dest == DQUOTE || *dest == SQUOTE) quote = *dest;
+//    else if( quote == NULLCHAR && 'a'<= *dest && *dest <= 'z') *dest += delta;
+//    dest++;
+//  }
+//}
+
+//
 // Cyrillic fonts available:
 //
 // u8g2_font_4x6_t_cyrillic
@@ -212,7 +226,7 @@ static void LCD_PrintError(const unsigned char *msg){
   LCD_PrintPROGMEM(msg);
   byte tmp = *txtpos;
   *txtpos = NULLCHAR;
-  if( current_line == NULL || txtpos >= program_end){
+  if( txtpos >= program_end){
     append_Message_String( LCD_Message, program_end + sizeof(LINE_NUMBER_TYPE), true, true);    
   }
   else{
@@ -330,3 +344,97 @@ static char *LCD_ConvertDouble( double n, char *buff){
   buff[i+1] = NULLCHAR;
   return buff;
 }
+
+//
+// starts new entry location either for the new program line or for the INPUT expression
+// 
+static void start_New_Entry( bool INPUT_expression){
+  unsigned char * tmp = program_end + sizeof(LINE_NUMBER_TYPE);
+
+  // handling INPUT expression
+  if( INPUT_expression && txtpos>program_end){ //must be immediately processing an input statement
+    tmp = txtpos;
+    while( *tmp != NL && *tmp != NULLCHAR) tmp++;
+    tmp += sizeof(LINE_NUMBER_TYPE); 
+  }
+  *tmp = NULLCHAR;
+  input_entry_location = tmp;
+  input_position = 0;
+  Serial.print( ">");
+}
+
+//
+// monitors both the console and the hardware keyboard;
+// adds characters to the entry line;
+// returns false if NL is entered 
+// 
+static bool continue_New_Entry(){
+  char c;
+  while( Serial.available()){
+    c = Serial.read();
+    
+    // force new line if end of memory
+    if( input_entry_location+input_position > variables_begin-3) c = NL;
+
+    if( c == CR) continue; // ignored
+    input_entry_location[input_position++] = c;
+    if( c == NL){
+      input_entry_location[input_position] = NULLCHAR;
+      return false;
+    }
+  }
+  return true;
+}
+
+//
+// Inputs a line from console
+// Controls the LCD display
+//
+//static void LCD_EnterLine(){
+//  txtpos = program_end+sizeof(LINE_NUMBER_TYPE);
+//  LCD_ScrollUp();
+//  u8g2.firstPage();  
+//  for( int i=LCD_SCREEN_ROWS-2, j=55; i>=0; i--, j-=8)
+//    u8g2.drawUTF8(0,j,LCD_Line_Pointers[i]);
+//  *LCD_OutputLine = '>';
+//  LCD_OutputLine[1] = NULLCHAR;
+//  LCD_Output_Keep = false;
+//  u8g2.drawUTF8(0,63,LCD_OutputLine);
+//  u8g2.nextPage();
+//  Serial.write( '>');
+//  while( true){
+//    //
+//    // TODO: move this blocking out
+//    //
+//    while(true){
+//      if(Serial.available()) return Serial.read();
+//    }
+//    char c = inchar1();
+//    switch(c){
+//    case NL:
+//    case CR:
+//      Serial.println();
+//      txtpos[0] = NL;
+//      u8g2.drawUTF8(0,63,LCD_OutputLine);
+//      u8g2.nextPage();
+//      return;
+//    case CTRLH:
+//      if(txtpos == program_end)
+//        break;
+//      txtpos--;
+//
+//      // print_PROGMEM(backspacemsg); //Emulating blink. Does not work really 
+//      break;
+//    default:
+//      // We need to leave at least one space to allow us to shuffle the line into order
+//      if(txtpos == variables_begin-2)
+//        Serial.write(BELL);
+//      else
+//      {
+//        txtpos[0] = c;
+//        txtpos++;
+//        Serial.write(c);
+//      }
+//    }
+//  }
+//}

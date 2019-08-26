@@ -186,7 +186,7 @@ static unsigned char * program_LoadLine( unsigned char *ptr, File f0){
 // CHAIN MYPROG.BAS
 // LOAD MYPROG.BAS
 //
-static bool process_KW_LOAD( bool chain){
+static bool process_KW_LOAD(){
   get_Filename_Token(SD_filename, true);
   if( validate_ExpressionError()) return true;
   if( !SD_initialized){
@@ -205,8 +205,6 @@ static bool process_KW_LOAD( bool chain){
     program_end = program_LoadLine( program_end, f0);
   f0.close();
   *program_end = NULLCHAR;
-  if( chain) PRG_State = PRG_RUNNING;
-  else PRG_State = PRG_CONSOLE;
   program_Reset();
   return false;
 }
@@ -350,7 +348,7 @@ static bool process_KW_ELIST(){
 // ECHAIN
 // ELOAD
 //
-static bool process_KW_ELOAD( bool chain){
+static bool process_KW_ELOAD(){
   report_File(SD_LOADING_MSG, "from EEPROM");
   program_end = program_start;
   byte pos = 0;
@@ -378,8 +376,6 @@ static bool process_KW_ELOAD( bool chain){
   }
   program_end += pos;  
   *program_end = NULLCHAR;
-  if( chain) PRG_State = PRG_RUNNING;
-  else PRG_State = PRG_CONSOLE;
   program_Reset();
   return false;
 }
