@@ -5,10 +5,10 @@
 - MEM							- *displays memory usage*
 - NEW							- *clears the current program*
 - RUN							- *executes the current program from the beginning*
-- STOP							- *stops current program, resets counter to the first line*
-- PAUSE							- *stops current program, keeps the counter*
+- STOP							- *stops the current program, resets the counter to the first line*
+- PAUSE							- *stops the current program, keeps the counter*
 - CONTINUE						- *(console only) proceeds from the counter*
-- PLINE							- *returns current program line number*
+- PLINE							- *returns the current program's line number*
 - SET							- *sets system-wide modes, such as SET TMODE,GRADIAN*
 
 ## File IO/SD Card
