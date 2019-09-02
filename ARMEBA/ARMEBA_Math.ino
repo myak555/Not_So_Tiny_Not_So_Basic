@@ -5,6 +5,16 @@
 /////////////////////////////////////////////////////
 
 //
+// Checks if the value at text position is within the trigonometry range
+// if the input is outsde +/- 0.1 radian accuracy, sine and cosine make no sense
+//
+inline bool validate_TrigArgument( double a){
+  if( a < -1e7 < a && a < 1e7) return false;
+  expression_Error = true;
+  return true;
+}
+
+//
 // Converts trig argument to radian based on mode
 //
 static double tmode_Convert(double a){
@@ -74,7 +84,7 @@ static double compute_TAN( double a){
   if( validate_TrigArgument( a)) return 0.0;
   double res = cos( a);
   if( -1e-8 < res && res < 1e-8){
-    expression_error = true;
+    expression_Error = true;
     return 0.0;  
   }
   return sin(a) / res;
@@ -92,7 +102,7 @@ static double compute_ATAN( double a){
 //
 static double compute_SQRT( double a){
   if( a<0.0){
-    expression_error = true;
+    expression_Error = true;
     return 0.0;
   }
   return sqrt(a);
@@ -110,7 +120,7 @@ static double compute_RADIUS( double a, double b){
 //
 static double compute_LN( double a){
   if( a<=0.0){
-    expression_error = true;
+    expression_Error = true;
     return 0.0;
   }
   return log(a);
@@ -128,7 +138,7 @@ static double compute_EXP( double a){
 //
 static double compute_LG( double a){
   if( a<=0.0){
-    expression_error = true;
+    expression_Error = true;
     return 0.0;
   }
   return log10(a);
@@ -139,7 +149,7 @@ static double compute_LG( double a){
 //
 static double compute_LOG( double a, double b){
   if( a<0.0 || b<0.0){
-    expression_error = true;
+    expression_Error = true;
     return 0.0;
   }
   return log10(b) / log10(a);
@@ -163,7 +173,7 @@ static double compute_POW( double a, double b){
   }
   if( b<1e-6) return a;
   if( tmp < 0.0){
-    expression_error = true;
+    expression_Error = true;
     return 0.0;
   }
   a *= pow( tmp, b);
@@ -177,7 +187,7 @@ static double compute_FACT( double a){
   if( a<=0.0) return 1.0;
   long r = (long)a;
   if( r > 30){
-    expression_error = true;
+    expression_Error = true;
     return 0.0;
   }
   a = 1.0;
@@ -190,7 +200,7 @@ static double compute_FACT( double a){
 //
 static double compute_Cnk( double a, double b){
   if( a<0.0 || b>a){
-    expression_error = true;
+    expression_Error = true;
     return 0.0;
   }
   if( b==0.0 || a==b) return 1.0;
@@ -201,4 +211,41 @@ static double compute_Cnk( double a, double b){
   for( long i=k; i<=n; i++) a *= i;
   for( long i=1; i<=k; i++) a /= i;
   return a;
+}
+
+//
+// Makes a console dump
+// TODO: replace with LCD version 
+//
+static double perform_DUMP( double a, double b){
+  long addr = (long)a;
+  long nread = (long)b;
+  byte c;
+  for( int i=0; i<nread; i++){
+    c = program_Memory[addr+i];
+    switch(c){
+      case NL:
+        Serial.print( "<LF>");
+        break;    
+      case CR:
+        Serial.println( "<CR>");
+        break;    
+      case NULLCHAR:
+        Serial.print( "<00>");
+        break;
+      default:
+        if( c < ' ' || c >= 0x80){
+          Serial.write( '<');
+          Serial.print( c);
+          Serial.write( '>');
+          break;
+        }
+        Serial.write( c);
+        delay(1);
+        break;
+    }
+  }
+  Serial.println();
+  Serial.print("End dump: ");
+  return a+b;
 }

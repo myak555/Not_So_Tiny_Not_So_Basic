@@ -27,27 +27,28 @@ static void init_XRAM(){
 // MEM
 //
 static void process_KW_MEM( bool usage){
+  unsigned long avl;
   int j = append_Message_PROGMEM( LCD_Message, XRAM_TOTAL_MSG, true, false);
   snprintf( LCD_Message+j, LCD_TEXT_BUFFER_LINE_LENGTH-j, "%lu", XRAM_SIZE);
-  LCD_PrintString( LCD_Message);
+  LCD_PrintString( LCD_Message, true);
   if( usage)
   {
-    unsigned int avl = variables_begin - program_end;
+    avl = stack_Top - program_End;
     j = append_Message_PROGMEM( LCD_Message, XRAM_AVAILABLE_MSG, true, false);
     snprintf( LCD_Message+j, LCD_TEXT_BUFFER_LINE_LENGTH-j, "%u", avl);
-    LCD_PrintString( LCD_Message);
+    LCD_PrintString( LCD_Message, true);
   }
 
   #ifdef EEPROM_ENABLE
   j = append_Message_PROGMEM( LCD_Message, EEPROM_TOTAL_MSG, true, false);
   snprintf( LCD_Message+j, LCD_TEXT_BUFFER_LINE_LENGTH-j, "%u", EEPROM.length());
-  LCD_PrintString( LCD_Message);
+  LCD_PrintString( LCD_Message, true);
   if(!usage) return;
   for( int i=0; i<EEPROM.length(); i++ ) {
     if( EEPROM.read( i ) != NULLCHAR) continue;
     j = append_Message_PROGMEM( LCD_Message, EEPROM_AVAILABLE_MSG, true, false);
     snprintf( LCD_Message+j, LCD_TEXT_BUFFER_LINE_LENGTH-j, "%u", EEPROM.length()-i);
-    LCD_PrintString( LCD_Message);
+    LCD_PrintString( LCD_Message, true);
     return;            
   }
   #endif /* EEPROM_ENABLE */
@@ -85,21 +86,12 @@ static void init_SD(){
   if( SD.exists( SD_filename)) {
     File f0 = SD.open( SD_filename);
     while( f0.available())
-      program_end = program_LoadLine( program_end, f0);
+      program_End = program_LoadLine( program_End, f0);
     f0.close();
-    *program_end = NULLCHAR;
+    *program_End = NULLCHAR;
     PRG_State = PRG_RUNNING;
   }
   #endif /* SD_AUTORUN */  
-}
-
-//
-// Reports file error or action
-//
-static void report_File(const unsigned char *msg, char *filename){
-  int i = append_Message_PROGMEM( LCD_Message, msg, true, false);
-  snprintf( LCD_Message+i, LCD_TEXT_BUFFER_LINE_LENGTH-i, "%s", filename);
-  LCD_PrintString(LCD_Message);  
 }
 
 //
@@ -107,12 +99,7 @@ static void report_File(const unsigned char *msg, char *filename){
 // FILES BUBBA - makes listing of subfolder BUBBA
 //
 static bool process_KW_FILES(){
-  get_Filename_Token(SD_directory, false);
-  if( validate_ExpressionError()) return true;
-  if( !SD_initialized){
-    LCD_PrintPROGMEM(SD_ERROR_MSG);
-    return true;
-  }
+  if( get_Filename_Token(SD_directory, false)) return true;
   File dir = SD.open( SD_directory );
   if( !dir.isDirectory() ) {
     report_File(SD_NOTDIR_MSG, SD_directory);
@@ -140,16 +127,19 @@ static bool process_KW_FILES(){
       snprintf( LCD_Message+j, LCD_TEXT_BUFFER_LINE_LENGTH-j, "%7lu", (unsigned long)entry.size());
       file_count++;
     }
-    LCD_PrintString(LCD_Message);
+    LCD_PrintString(LCD_Message, true);
     entry.close();
   }
   dir.close();
   snprintf( LCD_Message, LCD_TEXT_BUFFER_LINE_LENGTH, " %d dir(s), %d file(s)", dir_count, file_count);
-  LCD_PrintString(LCD_Message);
+  LCD_PrintString(LCD_Message, true);
   return false;
 }
 
-static unsigned char * program_LoadLine( unsigned char *ptr, File f0){
+//
+// Loads one line from file
+//
+static byte * program_LoadLine( byte *ptr, File f0){
   byte l = 0;
   while( f0.available()){
     ptr[l] = f0.read();
@@ -158,13 +148,13 @@ static unsigned char * program_LoadLine( unsigned char *ptr, File f0){
       continue;
     }
     ptr[l] = NULLCHAR;
-    txtpos = ptr;
+    parser_Position = ptr;
     Program_Line_Write_Number( ptr, parse_Integer( true) & 0xFFFF);
     l = LINE_START_OFFSET; // leave space for line length
     break; 
   }
   while( f0.available()){
-    unsigned char c = f0.read();
+    byte c = f0.read();
     if( c == NULLCHAR || l>=254){
       ptr[l++] = NL;
       break;
@@ -187,24 +177,20 @@ static unsigned char * program_LoadLine( unsigned char *ptr, File f0){
 // LOAD MYPROG.BAS
 //
 static bool process_KW_LOAD(){
-  get_Filename_Token(SD_filename, true);
-  if( validate_ExpressionError()) return true;
-  if( !SD_initialized){
-    LCD_PrintPROGMEM(SD_ERROR_MSG);
-    return true;
-  }
+  if( get_Filename_Token(SD_filename, true)) return true;
   if( !SD.exists( SD_filename ))
   {
+    expression_Error = true;
     report_File(SD_NOTFOUND_MSG, SD_filename);
     return true;
   }
   report_File(SD_LOADING_MSG, SD_filename);
-  program_end = program_start;
+  program_End = program_Top;
   File f0 = SD.open( SD_filename);
   while( f0.available())
-    program_end = program_LoadLine( program_end, f0);
+    program_End = program_LoadLine( program_End, f0);
   f0.close();
-  *program_end = NULLCHAR;
+  *program_End = NULLCHAR;
   program_Reset();
   return false;
 }
@@ -214,12 +200,7 @@ static bool process_KW_LOAD(){
 // SAVE MY_FILE.BAS
 //
 static bool process_KW_SAVE(){
-  get_Filename_Token(SD_filename, true);
-  if( validate_ExpressionError()) return true;
-  if( !SD_initialized){
-    LCD_PrintPROGMEM(SD_ERROR_MSG);
-    return true;
-  }
+  if( get_Filename_Token(SD_filename, true)) return true;
   if( SD.exists( SD_filename )) {
     SD.remove( SD_filename );
   }
@@ -229,19 +210,21 @@ static bool process_KW_SAVE(){
     while( j>=0 && SD_filename[j] != '/') j--;
     if( j>0){
       strncpy( SD_directory, SD_filename, j);
-      report_File(SD_MAKING_MSG, SD_directory);
-      SD.mkdir( SD_directory);    
+      if( !SD.exists( SD_directory)){
+        report_File(SD_MAKING_MSG, SD_directory);
+        SD.mkdir( SD_directory);
+      }    
     }
   }
   File f0 = SD.open( SD_filename, FILE_WRITE );
-  unsigned char *ptr = program_start;
-  while(ptr<program_end){
+  byte *ptr = program_Top;
+  while(ptr<program_End){
     LINE_NUMBER_TYPE line_number = Program_Line_Number(ptr);
     byte line_length = Program_Line_Length(ptr);
-    snprintf( LCD_Message, LCD_TEXT_BUFFER_LINE_LENGTH, "%04u ", line_number);
-    byte l = strlen(LCD_Message);
-    for( byte i=0; i<l; i++) f0.write( LCD_Message[i]);
-    for( byte i=3; i<line_length-1; i++) f0.write( ptr[i]);
+    snprintf( IO_Buffer, IO_BUFFER_LENGTH, "%04u ", line_number);
+    byte l = strlen(IO_Buffer);
+    for( byte i=0; i<l; i++) f0.write( IO_Buffer[i]);
+    for( byte i=LINE_START_OFFSET; i<line_length-1; i++) f0.write( ptr[i]);
     f0.write( NL);
     f0.write( CR); // obey CR convention
     ptr += line_length;
@@ -252,52 +235,47 @@ static bool process_KW_SAVE(){
 }
 
 //
-// checks if the character is valid for a filename
+// Extracts filename from the input string
 //
-static bool validate_NameCharacter(){
-  char c = *txtpos;
-  if( c >= '0' && c <= '9' ) return true;
-  if( c >= 'A' && c <= 'Z' ) return true;
-  if( c >= 'a' && c <= 'z' ) return true;
-  if( c == '_' ) return true;
-  if( c == '+' ) return true;
-  if( c == '.' ) return true;
-  if( c == '~' ) return true;
-  if( c == '/' ) return true;
+static bool get_Filename_Token( char *name_string, bool addExt){
+  expression_Error = false;
+  byte pos = 0;
+  bool extension_found = false;
+
+  if( !SD_initialized)
+    return report_ExpressionError( SD_ERROR_MSG, true);
+
+  // skip all invalid characters
+  while( !isEndStatement() && !isFileNameCharacter()) parser_Position++;
+  
+  // empty string given - check if the valid filename is already in memory
+  if( isEndStatement())
+    return report_ExpressionError( CONSOLE_ARGUMENT_MSG, strlen(name_string)<=0);
+
+  // walk the token until an invalid character located
+  while( pos<(SD_FILE_NAME_MAX-1) && isFileNameCharacter()){
+    name_string[ pos++] = *parser_Position;
+    if( *parser_Position == '.'){
+      if( extension_found) return report_ExpressionError( CONSOLE_ARGUMENT_MSG, true);
+      extension_found = true;
+    }
+    parser_Position++;
+  }
+  ignore_Blanks();
+  
+  if(addExt && !extension_found && pos < (SD_FILE_NAME_MAX-5))
+    for(byte i=0; i<4; i++) name_string[ pos++] = SD_DEFAULT_EXT[i];
+  name_string[ pos] = NULLCHAR;
   return false;
 }
 
 //
-// Extracts filename from the input string
+// Reports file error or action
 //
-static void get_Filename_Token( char *name_string, bool addExt){
-  expression_error = false;
-  int wrt = 0;
-  bool extension_found = false;
-
-  // skip all invalid characters
-  while( validate_EndStatement() && !validate_NameCharacter()) txtpos++;
-  
-  // empty string given - check if the valid filename is already in memory
-  if( !validate_EndStatement()) {
-    if( strlen(name_string)>0) return;
-    expression_error = true;
-    return;
-  }
-
-  // walk the token until an invalid character located
-  while( wrt<(SD_FILE_NAME_MAX-1) && validate_NameCharacter()){
-    name_string[ wrt++] = *txtpos;
-    extension_found = extension_found || (*txtpos == '.');
-    txtpos++;
-  }
-
-  // skip to the end of statement
-  ignore_Blanks();
-  
-  if(addExt && !extension_found && wrt < (SD_FILE_NAME_MAX-5))
-    for(int i=0; i<4; i++) name_string[ wrt++] = SD_DEFAULT_EXT[i];
-  name_string[ wrt] = NULLCHAR;
+static void report_File( byte *msg, char *filename){
+  int i = append_Message_PROGMEM( LCD_Message, msg, true, false);
+  snprintf( LCD_Message+i, LCD_TEXT_BUFFER_LINE_LENGTH-i, "%s", filename);
+  LCD_PrintString(LCD_Message, true);  
 }
 
 /////////////////////////////////////////////////////
@@ -321,24 +299,29 @@ static void init_EEPROM(){
 // ELIST - shows eprom content
 //
 static bool process_KW_ELIST(){
-  unsigned int *tmp = (unsigned int *)LCD_Message; 
-  int pos = 0;  
+  size_t pos1 = 0;  
+  size_t pos2 = 0;  
   for( int i=0; i<EEPROM.length(); i++ ){
     char c = EEPROM.read( i );
     if( c == NULLCHAR ) break;
-    if( pos<LCD_TEXT_BUFFER_LINE_LENGTH-1) LCD_Message[pos] = c;
+    if( pos1<LCD_TEXT_BUFFER_LINE_LENGTH-1) LCD_Message[pos1++] = c;
+    if( pos2<IO_BUFFER_LENGTH-1) IO_Buffer[pos2++] = c;
     if( c == NL){
-      LCD_Message[pos] = NULLCHAR;
-      LCD_PrintString(LCD_Message);
-      LCD_Message[0] = NULLCHAR;
-      pos = 0;
-      continue;
+      LCD_Message[pos1-1] = NULLCHAR;
+      IO_Buffer[pos2-1] = NULLCHAR;
+      LCD_PrintString(LCD_Message, false);
+      Serial.println( (char *)IO_Buffer); 
+      pos1 = 0;
+      pos2 = 0;
     }
-    pos++;
   }
-  if( pos>0){
-    LCD_Message[pos] = NULLCHAR;
-    LCD_PrintString(LCD_Message);
+  if( pos1>0){
+    LCD_Message[pos1] = NULLCHAR;
+    LCD_PrintString(LCD_Message, false);
+  }
+  if( pos2>0){
+    IO_Buffer[pos1] = NULLCHAR;
+    Serial.println( (char *)IO_Buffer); 
   }
   return false;
 }
@@ -350,32 +333,32 @@ static bool process_KW_ELIST(){
 //
 static bool process_KW_ELOAD(){
   report_File(SD_LOADING_MSG, "from EEPROM");
-  program_end = program_start;
+  program_End = program_Top;
   byte pos = 0;
   bool ln_Found = false;
   for( int i=0; i<EEPROM.length(); i++ ){
     char c = EEPROM.read( i );
     if( c == NULLCHAR) break;
-    program_end[pos] = c;
-    if( !ln_Found && !isDigit( program_end[pos])){
-      txtpos = program_end; 
+    program_End[pos] = c;
+    if( !ln_Found && !isDigit( program_End[pos])){
+      parser_Position = program_End; 
       LINE_NUMBER_TYPE line_number = parse_Integer( true) & 0xFFFF;
-      if( expression_error) return true;
+      if( expression_Error) return true;
       ln_Found = true;
-      Program_Line_Write_Number( program_end, line_number);
+      Program_Line_Write_Number( program_End, line_number);
       pos = LINE_START_OFFSET; // leave space for line length
       continue;
     }
     pos++;
     if( c == NL){
-      Program_Line_Write_Length(program_end, pos);
-      program_end += pos;
+      Program_Line_Write_Length(program_End, pos);
+      program_End += pos;
       pos = 0;
       ln_Found = false;
     }
   }
-  program_end += pos;  
-  *program_end = NULLCHAR;
+  program_End += pos;  
+  *program_End = NULLCHAR;
   program_Reset();
   return false;
 }
@@ -388,19 +371,19 @@ static bool process_KW_ELOAD(){
 static bool process_KW_ESAVE(){
   report_File(SD_SAVING_MSG, "to EEPROM");
   int ea = 0;
-  unsigned char *ptr = program_start;
-  while(ptr<program_end){
-    snprintf( LCD_Message, LCD_TEXT_BUFFER_LINE_LENGTH, "%u ", Program_Line_Number( ptr));
-    byte l = strlen(LCD_Message);
+  byte *ptr = program_Top;
+  while(ptr<program_End){
+    snprintf( IO_Buffer, IO_BUFFER_LENGTH, "%u ", Program_Line_Number( ptr));
+    byte l = strlen(IO_Buffer);
     for( byte i=0; i<l; i++){
       if( ea>=EEPROM.length()-1) break;
-      EEPROM.write( ea++, LCD_Message[i]);
+      EEPROM.write( ea++, IO_Buffer[i]);
     }
     byte line_length = Program_Line_Length( ptr);
     for( byte i=LINE_START_OFFSET; i<line_length; i++){
       if( ea>=EEPROM.length()-1) break;
+      if( ptr[i] == NULLCHAR) break; // for memory alignment
       EEPROM.write( ea++, ptr[i]);
-      if( ptr[i] == NULLCHAR) break;
     }
     ptr += line_length;
     if( ea>=EEPROM.length()-1) break;
@@ -541,19 +524,18 @@ static void display_TerminalScreen(){
 // if either are 0, tones turned off
 //
 static bool process_KW_TONE(bool wait_for_completion){
-  int frequency = (int)parse_Expression();
-  if( validate_ExpressionError()) return true;
-  if( validate_CharExpression( ',')) return true;
-  int duration = (int)parse_Expression();
-  if( validate_ExpressionError()) return true;
-  if( frequency == 0 || duration == 0 )
-  {
+  if( parse_Expression()) return true;
+  int frequency = (int)expression_Result;
+  if( validate_NextArgument()) return true;
+  if( parse_Expression()) return true;
+  int duration = (int)expression_Result;
+  if( frequency == 0 || duration == 0 ){
       noTone( BEEPER_PIN);
       return false;
   }
-  tone( BEEPER_PIN, frequency, duration );
+  tone( BEEPER_PIN, frequency, duration);
   if( wait_for_completion ) delay( duration );
-  return false;  
+  return false;
 }
 #endif
 
@@ -566,19 +548,18 @@ static bool process_KW_TONE(bool wait_for_completion){
 //
 // Reports pin error or action
 //
-static void report_Pin(const unsigned char *msg, int pinNo){
+static void report_Pin(const byte *msg, int pinNo){
   int i = append_Message_PROGMEM( LCD_Message, msg, true, false);
   snprintf( LCD_Message+i, LCD_TEXT_BUFFER_LINE_LENGTH-i, "%d", pinNo);
-  LCD_PrintString(LCD_Message);  
+  LCD_PrintString(LCD_Message, true);  
 }
 
 //
 // DELAY 1000 - waits for 1 second
 //
 static bool process_KW_DELAY(){
-  int duration = (int)parse_Expression();
-  if( validate_ExpressionError()) return true;
-  delay( duration );
+  if( parse_Expression()) return true;
+  delay( (int)expression_Result);
   return false;
 }
 
@@ -587,30 +568,34 @@ static bool process_KW_DELAY(){
 // AWRITE pin, value - analogue write to pin
 //
 static bool process_KW_PWRITE( bool analogue){
-  int pinNo = (int)parse_Expression();
-  if( validate_ExpressionError()) return true;
-  if( validate_CharExpression( ',')) return true;
-  int value = (int)parse_Expression();
-  if( validate_ExpressionError()) return true;
+  if( parse_Expression()) return true;
+  int pinNo = (int)expression_Result & 0xFF;
+  if( validate_NextArgument()) return true;
+  if( parse_Expression()) return true;
+  int value = (int)expression_Result & 0xFF;
   if( analogue){
     if( (pinNo<2 || pinNo>10) && pinNo != 44  && pinNo != 45 && pinNo != 46){
       report_Pin( PIN_PWM_ERROR_MSG, pinNo);
       return true;
     }
-    if( value < 0) value = 0;
-    if( value > 255) value = 255;
     analogWrite( pinNo, value );
     return false;
   }
-  //
+  
   // Masked pins in use, so SD card reader and XRAM cannot be busted
-  //
   if( pinNo<2 || pinNo>22 || pinNo==10 || pinNo==11 || pinNo==12){
     report_Pin( PIN_ALLOCATED_ERROR_MSG, pinNo);
     return true;
   }
-  if( value < 0) value = 0;
-  if( value > 1) value = 1;
-  digitalWrite( pinNo, value );
+  digitalWrite( pinNo, value>0);
   return false;
+}
+
+//
+// DREAD( pin, pullup) - digital read from pin
+//
+static double process_KW_DREAD( int pin, bool pullup){
+  if( pullup) pinMode( pin, INPUT_PULLUP);
+  else pinMode( pin, INPUT);
+  return (double)digitalRead( pin );
 }

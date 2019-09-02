@@ -18,13 +18,13 @@
 //
 /////////////////////////////////////////////////////
 
-#define ARMEBA_VERSION "2019-08"
+#define ARMEBA_VERSION "2019-09"
 
 #include <math.h>
 #include "ARMEBA_Hardware.h"
 #include "Keywords.h"
 
-// controls autorun settings
+// controls execution
 enum {
   PRG_CONSOLE = 0,
   PRG_RPN,
@@ -41,37 +41,45 @@ enum {
 static byte TMODE_State = TMODE_RADIAN;
 
 struct stack_Frame_FOR {
-  char ftype;
-  char var_name;
+  byte ftype;
+  byte var_name;
   long current_value;
   long last_value;
   long value_step;
-  unsigned char *return_line;
-  unsigned char *return_txtpos;
+  byte *return_line;
+  byte *return_parser_Position;
 };
 
 struct stack_Frame_GOSUB {
-  char ftype;
-  char dummy; // needed to align pointers with even bytes
-  unsigned char *return_line;
-  unsigned char *return_txtpos;
+  byte ftype;
+  byte dummy; // needed to align pointers with even bytes
+  byte *return_line;
+  byte *return_parser_Position;
+};
+
+struct stack_Frame_LOOP {
+  byte ftype;
+  byte dummy; // needed to align pointers with even bytes
+  byte *return_line;
+  byte *return_parser_Position;
+  byte *condition_parser_Position;
 };
 
 struct variable_Frame{
-  char vtype;
-  unsigned char value[9];
+  byte vtype;
+  byte value[9];
 };
 
 struct variable_Frame_PLong{
-  char vtype;
-  char dummy;  // needed to align pointers with even bytes
+  byte vtype;
+  byte dummy;  // needed to align pointers with even bytes
   long value1;
   long value2;
 };
 
 struct variable_Frame_PFloat{
-  char vtype;
-  char dummy;  // needed to align pointers with even bytes
+  byte vtype;
+  byte dummy;  // needed to align pointers with even bytes
   float value1;
   float value2;
 };
@@ -80,29 +88,57 @@ struct variable_Frame_PFloat{
 // Note on Arduino Double is the same as Float (4 bytes)
 //
 struct variable_Frame_Double{
-  char vtype;
-  char dummy;  // needed to align pointers with even bytes
+  byte vtype;
+  byte dummy;  // needed to align pointers with even bytes
   double value1;
   double value2;
 };
 
-#define STACK_SIZE (sizeof(struct stack_Frame_FOR)*30)
-#define VAR_SIZE sizeof(variable_Frame) // Size of variables in bytes
+//
+// Memory allocation:
+// program_Memory - top of the memory; on MEGA is allocated within XRAM
+// RPN_stack_Top = program_Memory - used to store RPN calculator lines
+// ...
+// LCD_stack_Top = RPN_stack_Top + RPN_stack_Length * sozeof(double) - used to store LCD lines for back-scrolling
+// ...
+// program_Top = variables_Top + 26 * sizeof( variables) - used to store programs
+// ...
+// program_End = program_Top + dynamic (depends on the program text length)
+// ...
+// input_entry_location = program_End - used for the new line entry
+// ...
+// stack_Ptr - stack grows up ^, towards the program_End; the distance between the stack_Ptr and the program_End determines
+//    the amount of available memory
+// ...
+// variables_Top = constant_Top + dynamic - used to store variables (currently fixed 26 values A-Z)
+// ...
+// constant_Top = LCD_stack_Top + LCD_stack_Length * sozeof(LCD_Line) - used to store constants
+// ...
+// End of XRAM = program_Memory + XRAM_SIZE
+//
 
-static volatile unsigned char *program_start;
-static volatile unsigned char *program_end;
-static volatile unsigned char *current_line;
-static volatile unsigned char *stack;
-static volatile unsigned char *stack_ptr;
-static volatile unsigned char *variables_begin;
-static volatile unsigned char *stack_limit;
-static unsigned char *txtpos; // used in parsing
-static unsigned char *input_entry_location;
-size_t input_position;
-static bool expression_error;
+#define STACK_SIZE (sizeof(struct stack_Frame_FOR)*30)
+#define VAR_SIZE sizeof(variable_Frame)  // Size of variables in bytes
+#define RPN_STACK_SIZE 50                // Size of RPN calculator stack; on MEGA it occupies 200 bytes
+#define LCD_STACK_SIZE 2560              // Can scroll back 20 lines of 128 characters 
+
+static double *RPN_stack_Top;
+static byte   *LCD_stack_Top;
+static byte   *constant_Top;
+static byte   *variables_Top;
+static byte   *program_Top;
+static byte   *program_End;
+static byte   *input_Top;
+static size_t  input_Position;
+static byte   *stack_Top;
+static byte   *current_Program_Line;
+static byte   *parser_Position;
+static double expression_Result;
+static bool   expression_Error;
 
 #define STACK_GOSUB_FLAG 'G'
 #define STACK_FOR_FLAG 'F'
+#define STACK_LOOP_FLAG 'L'
 #define VARIABLE_INT_FLAG 'I'
 #define VARIABLE_STRING_FLAG 'S'
 #define VARIABLE_FLOAT_FLAG 'F'
@@ -115,22 +151,8 @@ typedef unsigned short LINE_NUMBER_TYPE;
 int LCD_decimal_places = 6;
 
 //
-// Arduino sketch starts with a setup
-// Here, we initialize hardware and execute autoruns if necessary
-// SD card is presumed existing as without storage ARMEBA is useless
-//
-// Memory allocation:
-// program - top of program memory
-// ...
-// variables_begin - fixed 26 vars currently
-// ...
-// stack_limit
-// ...
-// stack_ptr - stack grows up ^
-//
-
-//
 // Hardware reset upon power-up
+// SD card is presumed existing as without storage ARMEBA is useless
 // Note SD card resets only once
 //
 void setup()
@@ -149,19 +171,20 @@ void loop()
   switch(PRG_State){
     case PRG_CONSOLE:
       if( continue_New_Entry()) break;
-      append_Message_String( LCD_Message, input_entry_location, true, true);
-      LCD_PrintString( LCD_Message);
-      if( !check_Line()) process_One_Line( input_entry_location, false);
-      else current_line = program_start; // out of pause condition
-      start_New_Entry( false);
+      append_Message_String( LCD_Message, input_Top, true, true);
+      LCD_PrintString( LCD_Message, true);
+      if( !check_Line()) process_One_Line( input_Top, false);
+      else current_Program_Line = program_Top; // out of pause condition
+      if( PRG_State == PRG_RUNNING) break;
+      start_New_Entry( false, '>');
       break;
     case PRG_RPN:
       // not implemented
       break;
     case PRG_RUNNING:
-      if( !check_Stop_Condition() && !process_One_Line( current_line, true)) return;
+      if( !check_Stop_Condition() && !process_One_Line( current_Program_Line, true)) return;
+      start_New_Entry( false, '>');
       PRG_State = PRG_CONSOLE;
-      start_New_Entry( false);
       break;
     default:
       break;

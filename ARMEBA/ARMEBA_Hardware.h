@@ -35,10 +35,10 @@
 #define XRAM_ENABLE() digitalWrite( XRAM_ENABLE_PIN, HIGH)
 #define XRAM_DISABLE() digitalWrite( XRAM_ENABLE_PIN, LOW)
 
-static const unsigned char XRAM_TOTAL_MSG[]           PROGMEM = " XRAM total  : ";
-static const unsigned char XRAM_AVAILABLE_MSG[]       PROGMEM = " XRAM free   : ";
+static const byte XRAM_TOTAL_MSG[]           PROGMEM = " XRAM total  : ";
+static const byte XRAM_AVAILABLE_MSG[]       PROGMEM = " XRAM free   : ";
 
-static volatile unsigned char *program = reinterpret_cast<volatile char*>(XRAM_START);
+static volatile byte *program_Memory = reinterpret_cast<volatile byte*>(XRAM_START);
 
 /////////////////////////////////////////////////////
 //
@@ -65,20 +65,21 @@ static volatile unsigned char *program = reinterpret_cast<volatile char*>(XRAM_S
 #define SD_AUTORUN 1
 //#undef SD_AUTORUN
 #define SD_FILE_NAME_MAX  65
+#define IO_BUFFER_LENGTH  256
 
-static const unsigned char SD_AUTORUN_NAME[]  PROGMEM = "autorun.bas";
-static const unsigned char SD_ERROR_MSG[]     PROGMEM = " SD card error";
-static const unsigned char SD_NOTFOUND_MSG[]  PROGMEM = " Not found: ";
-static const unsigned char SD_NOTDIR_MSG[]    PROGMEM = " Not a dir: ";
-static const unsigned char SD_LISTING_MSG[]   PROGMEM = " List: ";
-static const unsigned char SD_LOADING_MSG[]   PROGMEM = " Load: ";
-static const unsigned char SD_SAVING_MSG[]    PROGMEM = " Save: ";
-static const unsigned char SD_MAKING_MSG[]    PROGMEM = " Make: ";
-static const unsigned char SD_DIR_MSG[]       PROGMEM = "(dir)";
-static const unsigned char SD_SLASH_MSG[]     PROGMEM = "/";
-static const unsigned char SD_SPACE_MSG[]     PROGMEM = " ";
-static const unsigned char SD_INDENT_MSG[]    PROGMEM = " ";
-static const unsigned char SD_DEFAULT_EXT[]   PROGMEM = ".bas";
+static const byte SD_AUTORUN_NAME[]  PROGMEM = "autorun.bas";
+static const byte SD_ERROR_MSG[]     PROGMEM = " SD card error";
+static const byte SD_NOTFOUND_MSG[]  PROGMEM = " Not found: ";
+static const byte SD_NOTDIR_MSG[]    PROGMEM = " Not a dir: ";
+static const byte SD_LISTING_MSG[]   PROGMEM = " List: ";
+static const byte SD_LOADING_MSG[]   PROGMEM = " Load: ";
+static const byte SD_SAVING_MSG[]    PROGMEM = " Save: ";
+static const byte SD_MAKING_MSG[]    PROGMEM = " Make: ";
+static const byte SD_DIR_MSG[]       PROGMEM = "(dir)";
+static const byte SD_SLASH_MSG[]     PROGMEM = "/";
+static const byte SD_SPACE_MSG[]     PROGMEM = " ";
+static const byte SD_INDENT_MSG[]    PROGMEM = " ";
+static const byte SD_DEFAULT_EXT[]   PROGMEM = ".bas";
 
 static bool SD_initialized = false;
 static char SD_filename[SD_FILE_NAME_MAX];
@@ -88,6 +89,7 @@ static File SD_File_In; // will be used later in data logging
 static File SD_File_Out;
 static bool SD_File_In_Enabled = false;
 static bool SD_File_Out_Enabled = false;
+static byte IO_Buffer[IO_BUFFER_LENGTH];
 
 /////////////////////////////////////////////////////
 //
@@ -108,10 +110,10 @@ static bool SD_File_Out_Enabled = false;
 #ifdef EEPROM_ENABLE
 #include <EEPROM.h>
 int eepos = 0;
-static const unsigned char EEPROM_TOTAL_MSG[]           PROGMEM = " EEPROM total: ";
-static const unsigned char EEPROM_AVAILABLE_MSG[]       PROGMEM = " EEPROM free : ";
-static const unsigned char EEPROM_GOING_MSG[]           PROGMEM = " EEPROM : ";
-static const unsigned char EEPROM_FORMAT_MSG[]          PROGMEM = " EEPROM clear";
+static const byte EEPROM_TOTAL_MSG[]           PROGMEM = " EEPROM total: ";
+static const byte EEPROM_AVAILABLE_MSG[]       PROGMEM = " EEPROM free : ";
+static const byte EEPROM_GOING_MSG[]           PROGMEM = " EEPROM : ";
+static const byte EEPROM_FORMAT_MSG[]          PROGMEM = " EEPROM clear";
 #endif
 
 /////////////////////////////////////////////////////
@@ -164,10 +166,10 @@ static char LCD_NumberLine[LCD_TEXT_BUFFER_LINE_LENGTH];
 static char LCD_OutputLine[LCD_TEXT_BUFFER_LINE_LENGTH];
 static bool LCD_Output_Keep = false; // used in print
 
-static const unsigned char STACK_LABEL_X[]           PROGMEM = "X:";
-static const unsigned char STACK_LABEL_Y[]           PROGMEM = "Y:";
-static const unsigned char STACK_LABEL_Z[]           PROGMEM = "Z:";
-static const unsigned char STACK_CONTENT[]           PROGMEM = "+0.123456789e+03";
+static const byte STACK_LABEL_X[]           PROGMEM = "X:";
+static const byte STACK_LABEL_Y[]           PROGMEM = "Y:";
+static const byte STACK_LABEL_Z[]           PROGMEM = "Z:";
+static const byte STACK_CONTENT[]           PROGMEM = "+0.123456789e+03";
 
 // The reset is apparently implemented in the LCD library
 U8G2_ST7920_128X64_F_HW_SPI u8g2(U8G2_R0, LCD_CS_PIN, LCD_RESET);
@@ -201,8 +203,8 @@ U8G2_ST7920_128X64_F_HW_SPI u8g2(U8G2_R0, LCD_CS_PIN, LCD_RESET);
 //
 /////////////////////////////////////////////////////
 
-static const unsigned char PIN_PWM_ERROR_MSG[]       PROGMEM = " No PWM support on pin ";
-static const unsigned char PIN_ALLOCATED_ERROR_MSG[] PROGMEM = " Pin in use: ";
+static const byte PIN_PWM_ERROR_MSG[]       PROGMEM = " No PWM support on pin ";
+static const byte PIN_ALLOCATED_ERROR_MSG[] PROGMEM = " Pin in use: ";
 
 #ifdef ARDUINO
   #define ECHO_CHARS 1
@@ -236,8 +238,8 @@ static const unsigned char PIN_ALLOCATED_ERROR_MSG[] PROGMEM = " Pin in use: ";
 //  necessary for some esp8266-based devices
 #ifdef ALIGN_MEMORY
   // Align memory addess x to an even page
-  #define ALIGN_UP(x) ((unsigned char*)(((unsigned int)(x + 1) >> 1) << 1))
-  #define ALIGN_DOWN(x) ((unsigned char*)(((unsigned int)x >> 1) << 1))
+  #define ALIGN_UP(x) ((byte*)(((unsigned int)(x + 1) >> 1) << 1))
+  #define ALIGN_DOWN(x) ((byte*)(((unsigned int)x >> 1) << 1))
 #else
   #define ALIGN_UP(x) x
   #define ALIGN_DOWN(x) x

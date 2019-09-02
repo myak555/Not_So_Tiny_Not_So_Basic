@@ -28,33 +28,28 @@
 // Valid: 9600, 19200, 38400, 115200, etc
 #define CONSOLE_BAUD 115200
 
-static const unsigned char ARMEBA_INITIAL_MSG[]       PROGMEM = "ARMEBA IS NOT BASIC";
-static const unsigned char ARMEBA_VERSION_MSG[]       PROGMEM = "version " ARMEBA_VERSION;
+static const byte ARMEBA_INITIAL_MSG[]       PROGMEM = "ARMEBA IS NOT BASIC";
+static const byte ARMEBA_VERSION_MSG[]       PROGMEM = "version " ARMEBA_VERSION;
 
-static const unsigned char ARMEBA_COLUMN_MSG[]        PROGMEM = "12345678901234567890123456789012345";
-static const unsigned char ARMEBA_COLUMN_MSG2[]       PROGMEM = "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII";
+static const byte ARMEBA_COLUMN_MSG[]        PROGMEM = "12345678901234567890123456789012345";
+static const byte ARMEBA_COLUMN_MSG2[]       PROGMEM = "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII";
 
-static const unsigned char CONSOLE_INTERRUPT_MSG[]    PROGMEM = " <HALT>";
-static const unsigned char CONSOLE_SYNTAX_MSG[]       PROGMEM = " Syntax error";
-static const unsigned char CONSOLE_ARGUMENT_MSG[]     PROGMEM = " Argument error";
-static const unsigned char CONSOLE_UNKNOWN_MSG[]      PROGMEM = " Unknown key";
-static const unsigned char CONSOLE_LABEL_MSG[]        PROGMEM = " No such line";
-static const unsigned char CONSOLE_LINENOTFOUND_MSG[] PROGMEM = " Line not found";
-static const unsigned char CONSOLE_RETURN_MSG[]       PROGMEM = " No line to return";
-static const unsigned char CONSOLE_INPUT_MSG[]        PROGMEM =  "? ";
-static const unsigned char CONSOLE_STACKERROR_MSG[]   PROGMEM = " Recursion too deep";
-static const unsigned char CONSOLE_NOSUCHMODE_MSG[]   PROGMEM = " Impossible mode";
-static const unsigned char CONSOLE_UNDEFTRIG_MSG[]    PROGMEM = " Undefined trig argument";
-
-static const unsigned char CONSOLE_ZERO_MSG[]         PROGMEM = "0";
-
-//static const unsigned char unimplimentedmsg[]         PROGMEM = "Unimplemented";
+static const byte CONSOLE_INTERRUPT_MSG[]    PROGMEM = " <HALT>";
+static const byte CONSOLE_SYNTAX_MSG[]       PROGMEM = " Syntax error";
+static const byte CONSOLE_ARGUMENT_MSG[]     PROGMEM = " Argument error";
+static const byte CONSOLE_TOOFEW_MSG[]       PROGMEM = " Not enough arguments";
+static const byte CONSOLE_UNKNOWN_MSG[]      PROGMEM = " Unknown key";
+static const byte CONSOLE_LINENOTFOUND_MSG[] PROGMEM = " Line not found";
+static const byte CONSOLE_STACKERROR_MSG[]   PROGMEM = " Stack busted";
+static const byte CONSOLE_ERROR_POINTER[]    PROGMEM = "^";
+static const byte CONSOLE_INPUT_MSG[]        PROGMEM =  "? ";
+static const byte CONSOLE_ZERO_MSG[]         PROGMEM = "0";
 
 //
 // Primary keyword table
 // Each token ends with 0x80 added to it
 //
-const static unsigned char KW_Primary[] PROGMEM = {
+const static byte KW_Primary[] PROGMEM = {
   'L','I','S','T'+0x80,
   'l','i','s','t'+0x80,
   'L','O','A','D'+0x80,
@@ -191,7 +186,7 @@ enum {
 // Note that the longer function name has to be ahead of the shorter one,
 // e.g. 'LOW' preceeds 'LO' and 'HIGH' preceeds 'HI'
 //
-const static unsigned char KW_Functions[] PROGMEM = {
+const static byte KW_Functions[] PROGMEM = {
   'L','O','W'+0x80,
   'l','o','w'+0x80,
   'L','O','G'+0x80,
@@ -305,12 +300,12 @@ enum {
 //
 // Used in FOR loop processing  
 //
-const static unsigned char KW_To[] PROGMEM = {
+const static byte KW_To[] PROGMEM = {
   'T','O'+0x80,
   't','o'+0x80,
   0
 };
-const static unsigned char KW_Step[] PROGMEM = {
+const static byte KW_Step[] PROGMEM = {
   'S','T','E','P'+0x80,
   's','t','e','p'+0x80,
   0
@@ -319,7 +314,7 @@ const static unsigned char KW_Step[] PROGMEM = {
 //
 // Comparisons  
 //
-const static unsigned char KW_Compare[] PROGMEM = {
+const static byte KW_Compare[] PROGMEM = {
   '>','='+0x80,
   '<','='+0x80,
   '=','='+0x80,
@@ -346,7 +341,7 @@ const static unsigned char KW_Compare[] PROGMEM = {
 //
 // Logicals  
 //
-const static unsigned char KW_Logic[] PROGMEM = {
+const static byte KW_Logic[] PROGMEM = {
   'A','N','D'+0x80,
   'a','n','d'+0x80,
   'O','R'+0x80,
@@ -367,7 +362,7 @@ const static unsigned char KW_Logic[] PROGMEM = {
 //
 // Power tokens 
 //
-const static unsigned char KW_Power[] PROGMEM = {
+const static byte KW_Power[] PROGMEM = {
   '*','*'+0x80,
   '^'+0x80,
   0

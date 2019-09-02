@@ -17,7 +17,7 @@ void init_Console(){
 //
 // Prints to console only
 //
-static void CONSOLE_PrintPROGMEM( const unsigned char *msg){
+static void CONSOLE_PrintPROGMEM( const byte *msg){
   append_Message_PROGMEM( LCD_Message, msg, true, false);
   Serial.println( LCD_Message);
 }
@@ -93,18 +93,19 @@ static void LCD_ScrollUp(){
 
 //
 // Scrolls screen buffer up one line and prints message
+// If print_serial is set, the line is duplicated to the serial port
 //
-static void LCD_PrintString( char *msg){
+static void LCD_PrintString( char *msg, bool print_serial){
   LCD_ScrollUp();
   strncpy( LCD_Line_Pointers[LCD_SCREEN_ROWS-1], msg, LCD_TEXT_BUFFER_LINE_LENGTH);
   LCD_DrawScreen();
-  Serial.println( LCD_Line_Pointers[LCD_SCREEN_ROWS-1]);
+  if( print_serial) Serial.println( LCD_Line_Pointers[LCD_SCREEN_ROWS-1]);
 }
 
 //
 // Scrolls screen buffer up one line and prints message from progmem
 //
-static void LCD_PrintPROGMEM( const unsigned char *msg){
+static void LCD_PrintPROGMEM( const byte *msg){
   LCD_ScrollUp();
   append_Message_PROGMEM( LCD_Line_Pointers[LCD_SCREEN_ROWS-1], msg, true, false);
   LCD_DrawScreen();
@@ -132,7 +133,7 @@ static size_t count_Unicode( char *dest){
 // Trims the string to prevent screen overflow
 // Returns the total number of bytes in the string
 //
-static size_t append_Message_String( char *dest, char *msg, bool reset, bool unicode_count){
+static size_t append_Message_String( byte *dest, byte *msg, bool reset, bool unicode_count){
   size_t i = 0;
   size_t position_count = 0;
   if( !reset){
@@ -140,7 +141,7 @@ static size_t append_Message_String( char *dest, char *msg, bool reset, bool uni
     position_count = count_Unicode( dest);
   }
   while( i<LCD_TEXT_BUFFER_LINE_LENGTH-1){
-    byte c = (byte)(*msg++);
+    byte c = *msg++;
     dest[i++] = c;
     if( c == NULLCHAR) break;
     if( c == NL){
@@ -163,15 +164,16 @@ static size_t append_Message_String( char *dest, char *msg, bool reset, bool uni
 // Trims the string to prevent screen overflow
 // Returns the total number of bytes in the string
 //
-static size_t append_Message_PROGMEM( char *dest, const unsigned char *msg, bool reset, bool unicode_count){
+static size_t append_Message_PROGMEM( byte *dest, const byte *msg, bool reset, bool unicode_count){
   size_t i = 0;
   size_t position_count = 0;
+  byte c;
   if( !reset){
     i=strlen( dest);
     position_count = count_Unicode( dest);    
   }
   while( i<LCD_TEXT_BUFFER_LINE_LENGTH-1){
-    char c = pgm_read_byte( msg++ );
+    c = pgm_read_byte( msg++ );
     dest[i++] = c;
     if( c == NULLCHAR) break;
     if( c != 208 && c != 209) position_count++;
@@ -188,7 +190,7 @@ static size_t append_Message_PROGMEM( char *dest, const unsigned char *msg, bool
 //
 // Prints a message from PROGMEM in any screen location
 //
-static void display_Message_PROGMEM(uint8_t x, uint8_t y, const unsigned char *msg){
+static void display_Message_PROGMEM(uint8_t x, uint8_t y, const byte *msg){
   if( !LCD_initialized) return;
   append_Message_PROGMEM( LCD_Message, msg, true, false);
   u8g2.drawUTF8(x,y,LCD_Message);
@@ -196,13 +198,19 @@ static void display_Message_PROGMEM(uint8_t x, uint8_t y, const unsigned char *m
 
 //
 // Prints one program line to LCD and console
-// Line number is converted to characters
+// Line number is converted into characters
 //
-static void LCD_PrintProgLine( unsigned char *ptr){
+static void LCD_PrintProgLine( byte *ptr){
   snprintf( LCD_Message, LCD_TEXT_BUFFER_LINE_LENGTH, "%03u ", Program_Line_Number( ptr));
   append_Message_String( LCD_Message, Program_Line_Body( ptr), false, true);
-  LCD_PrintString( LCD_Message);
+  LCD_PrintString( LCD_Message, false);
   LCD_Output_Keep = false;
+  snprintf( IO_Buffer, IO_BUFFER_LENGTH, "%04u ", Program_Line_Number( ptr));
+  size_t pos = strlen( IO_Buffer);
+  byte *p = Program_Line_Body( ptr);
+  while( pos < IO_BUFFER_LENGTH-1 && *p != NL) IO_Buffer[pos++] = *p++;
+  IO_Buffer[pos] = NULLCHAR;
+  Serial.println( (char *)IO_Buffer);
 }
 
 //
@@ -222,65 +230,58 @@ static void display_SplashScreen(){
 //
 // Prints an error message, followed by the offending code line
 //
-static void LCD_PrintError(const unsigned char *msg){
+static void LCD_PrintError(const byte *msg){
   LCD_PrintPROGMEM(msg);
-  byte tmp = *txtpos;
-  *txtpos = NULLCHAR;
-  if( txtpos >= program_end){
-    append_Message_String( LCD_Message, program_end + sizeof(LINE_NUMBER_TYPE), true, true);    
+  byte tmp = *parser_Position;
+  byte *NL_location = Program_Line_Body( current_Program_Line);
+  *parser_Position = NL;
+  if( parser_Position >= input_Top){
+    append_Message_String( LCD_Message, input_Top, true, true);
+    NL_location = input_Top;
   }
   else{
-    snprintf( LCD_Message, LCD_TEXT_BUFFER_LINE_LENGTH, "%03u ", Program_Line_Number( current_line));
-    append_Message_String( LCD_Message, Program_Line_Body( current_line), false, true);
+    snprintf( LCD_Message, LCD_TEXT_BUFFER_LINE_LENGTH, "%03u ", Program_Line_Number( current_Program_Line));
+    append_Message_String( LCD_Message, NL_location, false, true);
   }
-  append_Message_String( LCD_Message, "^", false, true); // put marker at offending position
-  *txtpos = tmp;
-  append_Message_String( LCD_Message, txtpos, false, true); // and the end of offending line
-  LCD_PrintString(LCD_Message);
+  append_Message_PROGMEM( LCD_Message, CONSOLE_ERROR_POINTER, false, true); // put marker at offending position
+  *parser_Position = tmp;
+  while( *NL_location != NL && *NL_location != NULLCHAR) NL_location++;   
+  if( parser_Position < NL_location)
+    append_Message_String( LCD_Message, parser_Position, false, true); // and the end of offending line
+  LCD_PrintString(LCD_Message, true);
   LCD_Output_Keep = false;
 }
 
 //
-// prints a string from the txtpos
+// prints a string from the parser_Position
 // if string starts with double quotes, single qoutes are printed
 // and opposite way around (Python style)
 // sets expression error as needed
 //
 static void LCD_PrintQuoted(){
-  expression_error = false;
-  unsigned char delimiter = *txtpos; // initial delimiter
-  expression_error = (delimiter != '"') && (delimiter != '\'');
-  if( expression_error) return;
-  txtpos++;
+  byte delimiter = check_String();  // initial delimiter
+  if( report_ExpressionError( CONSOLE_ARGUMENT_MSG, false)) return true;
   
-  // corresponding delmiter exists before the end of line?
-  int i=0;
-  while(txtpos[i] != delimiter){
-    if(txtpos[i] != NL && txtpos[i++] != NULLCHAR) continue;
-    expression_error = true;
-    return;
-  }
-  
-  // print the characters
+  // print the characters (counting the Unicode)
   size_t j = strlen(LCD_OutputLine);
   size_t k = count_Unicode(LCD_OutputLine);
-  while(*txtpos != delimiter){
+  while(*parser_Position != delimiter){
     if( j<LCD_TEXT_BUFFER_LINE_LENGTH-2){
-      LCD_OutputLine[j++] = *txtpos;
+      LCD_OutputLine[j++] = *parser_Position;
       LCD_OutputLine[j] = NULLCHAR;
-      if( *txtpos != 208 && *txtpos != 209) k++;
+      if( *parser_Position != 208 && *parser_Position != 209) k++;
     }
-    txtpos++;
+    parser_Position++;
     if( k > LCD_SCREEN_COLUMNS-1){
       LCD_OutputLine[j] = NULLCHAR;
-      LCD_PrintString( LCD_OutputLine);
+      LCD_PrintString( LCD_OutputLine, true);
       LCD_OutputLine[0] = ' ';
       LCD_OutputLine[1] = NULLCHAR;
       j = 1;
       k = 1;
     }
   }  
-  txtpos++; // Skip over the last delimiter
+  parser_Position++; // Skip over the last delimiter
   ignore_Blanks();
 }
 
@@ -294,7 +295,7 @@ static void LCD_PrintNumber( double value){
   append_Message_String( LCD_OutputLine, LCD_NumberLine, false, false);
   byte k = count_Unicode(LCD_OutputLine);
   if( k > LCD_SCREEN_COLUMNS-1){
-    LCD_PrintString( LCD_OutputLine);
+    LCD_PrintString( LCD_OutputLine, true);
     append_Message_PROGMEM( LCD_OutputLine, SD_INDENT_MSG, true, false);
   }
 }
@@ -320,7 +321,7 @@ static char *LCD_ConvertDouble( double n, char *buff){
   // scientific format
   if( n>9999999.0 || n<1.0){
     int exponent = 0;
-    while( n>10.0){
+    while( n>=10.0){
       n *= 0.1;
       exponent++;
     }
@@ -348,19 +349,19 @@ static char *LCD_ConvertDouble( double n, char *buff){
 //
 // starts new entry location either for the new program line or for the INPUT expression
 // 
-static void start_New_Entry( bool INPUT_expression){
-  unsigned char * tmp = program_end + sizeof(LINE_NUMBER_TYPE);
+static void start_New_Entry( bool INPUT_expression, char prompt){
+  byte *new_parser_Position = program_End + sizeof(LINE_NUMBER_TYPE);
 
   // handling INPUT expression
-  if( INPUT_expression && txtpos>program_end){ //must be immediately processing an input statement
-    tmp = txtpos;
-    while( *tmp != NL && *tmp != NULLCHAR) tmp++;
-    tmp += sizeof(LINE_NUMBER_TYPE); 
+  if( INPUT_expression && parser_Position>program_End){ //must be immediately processing an input statement
+    new_parser_Position = parser_Position;
+    while( *new_parser_Position != NL && *new_parser_Position != NULLCHAR) new_parser_Position++;
+    new_parser_Position += sizeof(LINE_NUMBER_TYPE); 
   }
-  *tmp = NULLCHAR;
-  input_entry_location = tmp;
-  input_position = 0;
-  Serial.print( ">");
+  *new_parser_Position = NULLCHAR;
+  input_Top = new_parser_Position;
+  input_Position = 0;
+  Serial.write( prompt);
 }
 
 //
@@ -374,12 +375,12 @@ static bool continue_New_Entry(){
     c = Serial.read();
     
     // force new line if end of memory
-    if( input_entry_location+input_position > variables_begin-3) c = NL;
+    if( input_Top+input_Position > stack_Top-3) c = NL;
 
     if( c == CR) continue; // ignored
-    input_entry_location[input_position++] = c;
+    input_Top[input_Position++] = c;
     if( c == NL){
-      input_entry_location[input_position] = NULLCHAR;
+      input_Top[input_Position] = NULLCHAR;
       return false;
     }
   }
@@ -391,7 +392,7 @@ static bool continue_New_Entry(){
 // Controls the LCD display
 //
 //static void LCD_EnterLine(){
-//  txtpos = program_end+sizeof(LINE_NUMBER_TYPE);
+//  parser_Position = program_end+sizeof(LINE_NUMBER_TYPE);
 //  LCD_ScrollUp();
 //  u8g2.firstPage();  
 //  for( int i=LCD_SCREEN_ROWS-2, j=55; i>=0; i--, j-=8)
@@ -414,25 +415,25 @@ static bool continue_New_Entry(){
 //    case NL:
 //    case CR:
 //      Serial.println();
-//      txtpos[0] = NL;
+//      parser_Position[0] = NL;
 //      u8g2.drawUTF8(0,63,LCD_OutputLine);
 //      u8g2.nextPage();
 //      return;
 //    case CTRLH:
-//      if(txtpos == program_end)
+//      if(parser_Position == program_end)
 //        break;
-//      txtpos--;
+//      parser_Position--;
 //
 //      // print_PROGMEM(backspacemsg); //Emulating blink. Does not work really 
 //      break;
 //    default:
 //      // We need to leave at least one space to allow us to shuffle the line into order
-//      if(txtpos == variables_begin-2)
+//      if(parser_Position == variables_begin-2)
 //        Serial.write(BELL);
 //      else
 //      {
-//        txtpos[0] = c;
-//        txtpos++;
+//        parser_Position[0] = c;
+//        parser_Position++;
 //        Serial.write(c);
 //      }
 //    }
