@@ -23,7 +23,7 @@
 
 ## EEPROM - nonvolatile on-chip storage
 - EFORMAT						- *clears the EEPROM memory (with zeros)*
-- ELOAD							- *load the program in from EEPROM*
+- ELOAD							- *loads the program from EEPROM*
 - ESAVE							- *saves the current program to the EEPROM*
 - ELIST							- *prints out the EEProm contents*
 - ECHAIN						- *loads the program from EEProm and runs it*
@@ -34,8 +34,8 @@
 - POKE address, value			- *writes into memory location*
 - SHOW( line number)			- *returns memory location of line*
 - DUMP( from address, nbytes)	- *returns end address, shows memory content* (serial console only)
-- PRINT expression				- *print out the expression*
-- ? expression					- *same as PRINT*
+- PRINT expression				- *prints out the expression*
+- ? expression					- *shorthand for PRINT*
 - REM stuff						- *comments*
 - ' stuff						- *comments*
 - \# stuff						- *comments*
