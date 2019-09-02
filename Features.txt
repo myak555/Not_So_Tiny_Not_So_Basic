@@ -25,7 +25,7 @@ Current functionality implemented and tested:
 (*) LIST [from_line][, to_line] - rewritten, optimized for small screens, added from and to options.
 	Other statements can execute in the same line.
 (*) MEM - refactored, optimized for small screens. Other statements can execute in the same line.
-(/) NEW - unchanged.
+(*) NEW - changed memory allocation.
 (*) DELAY milliseconds - refactored.
 (*) AWRITE pin, value - rewritten, now checks pin availability to prevent clash with SD, XMEM, SCREEN.
 (*) DWRITE pin, value - rewritten, now accept TRUE and FALSE as values.
@@ -38,26 +38,26 @@ Current functionality implemented and tested:
 (*) ELOAD - rewritten.
 (*) ESAVE - rewritten. Other statements can execute in the same line.
 (*) RSEED value - rewritten.
-(/) RUN - unchanged.
+(*) RUN - changed running sequence.
 (-) LET var = value. LET is useless command. Just use assignments.
         (arguably in IF a<0 LET a=0 may be useful for clarity; need to put THEN ELSE later and the problem
 	will go away)
-(/) IF expression.
+(*) IF expression - refactored.
 (*) GOTO line_number - refactored. Negative line numbers are not allowed.
 	Computing GOTO, e.g. GOTO 100+10*I is not allowed (results in ugly programming practices).
 (*) GOSUB line_number - refactored. Negative line numbers are not allowed.
 	Computing GOSUB, e.g. GOSUB 100+10*I is not allowed.
-(*) RETURN - revorked stack
+(*) RETURN - reworked stack
 (*) REM <any_text>, (also ' <any_text>).
-(*) FOR var=<from> TO <to> [STEP <step>] Forces variable to long.
-(*) NEXT var. Forces variable to long
+(*) FOR var=<from> TO <to> [STEP <step>] Forces the variable to long.
+(*) NEXT var. Forces the variable to long
 (*) INPUT var[, question] - rewritten. Now can ask user e.g. INPUT A,"Enter coeff: "; also 
         changed incorrect entry procedure.
 (*) PRINT string/expression - rewritten and optimized for small and slow screens.
 (*) POKE address, value - rewritten.
 (*) PEEK( address) - rewritten.
 (-) END - removed as useless (it was a synonim for STOP)
-(/) STOP.
+(*) STOP - reworked the program running logic.
 (-) BYE - replaced with RESET.
 (+) RESET - on microprocessors one cannot leave the system.
 (*) ABS(expression) - refactored.
@@ -69,6 +69,13 @@ Current functionality implemented and tested:
 (+) DUMP(address, n_bytes) - prints memory dump.
 (+) FALSE, LO, LOW, TRUE, HI, HIGH.
 (+) PI = 3.14...
+(+) EE = 2.71...
 (+) SIN(expression)
 (+) COS(expression)
+(+) TAN(expression)
+(+) ASIN(expression)
+(+) ACOS(expression)
+(+) ATAN(expression)
 (+) POW(expression, expression)
+(+) SQRT(expression)
+(+) SET TMODE {RADIAN, DEGREES, GRADIAN}
